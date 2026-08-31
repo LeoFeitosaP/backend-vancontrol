@@ -1,0 +1,1073 @@
+{
+  "info": {
+    "name": "VanControl API Collection",
+    "description": "Coleção completa da API VanControl - Sistema de gerenciamento de transporte de van para estudantes",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Autenticação",
+      "description": "Endpoints de autenticação e registro de usuários",
+      "item": [
+        {
+          "name": "Registrar Usuário",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.environment.set(\"token\", jsonData.token);",
+                  "  pm.environment.set(\"userName\", jsonData.name);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"João da Silva\",\n  \"email\": \"joao@example.com\",\n  \"password\": \"Senha123\",\n  \"cpf\": \"12345678901\",\n  \"telefone\": \"11223-4567\",\n  \"instituicaoEnsino\": \"Universidade Federal\",\n  \"turno\": \"Manhã\",\n  \"endereco\": \"Rua Exemplo, 123, Bairro, Cidade, SP\",\n  \"cep\": \"12345-678\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.environment.set(\"token\", jsonData.token);",
+                  "  pm.environment.set(\"userName\", jsonData.name);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"joao@example.com\",\n  \"password\": \"Senha123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Teste de Usuário",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/user",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "user"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Rotas",
+      "description": "Gerenciamento de rotas de transporte",
+      "item": [
+        {
+          "name": "Criar Rota (ADMIN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.environment.set(\"rotaId\", jsonData.codigoRota);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descricao\": \"Rota Centro para a Universidade Federal\",\n  \"destino\": \"Universidade Federal\",\n  \"distancia\": 25.5,\n  \"tempoEstimado\": \"00:45\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/rotas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rotas"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Listar Todas as Rotas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/rotas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rotas"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Buscar Rota por Destino",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/rotas/Universidade Federal",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rotas",
+                "Universidade Federal"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Atualizar Descrição da Rota (ADMIN)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"novaDescricao\": \"Rota Centro para a Universidade Federal - Atualizada\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/rotas/{{rotaId}}/descricao",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rotas",
+                "{{rotaId}}",
+                "descricao"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deletar Rota (ADMIN)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/rotas?id={{rotaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "rotas"
+              ],
+              "query": [
+                {
+                  "key": "id",
+                  "value": "{{rotaId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Veículos",
+      "description": "Gerenciamento de veículos de transporte",
+      "item": [
+        {
+          "name": "Cadastrar Veículo (ADMIN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.environment.set(\"veiculoPlaca\", jsonData.placa);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"placa\": \"ABC-1D23\",\n  \"marca\": \"Mercedes-Benz\",\n  \"modelo\": \"Sprinter\",\n  \"ano\": 2022,\n  \"capacidade\": 15,\n  \"renavam\": \"12345678901\",\n  \"status\": \"ativo\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/veiculos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "veiculos"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Listar Todos os Veículos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/veiculos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "veiculos"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Buscar Veículo por Placa",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/veiculos/ABC-1D23",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "veiculos",
+                "ABC-1D23"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Atualizar Status do Veículo (ADMIN)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"placa\": \"ABC-1D23\",\n  \"status\": \"inativo\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/veiculos/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "veiculos",
+                "status"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deletar Veículo (ADMIN)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/veiculos?placa=ABC-1D23",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "veiculos"
+              ],
+              "query": [
+                {
+                  "key": "placa",
+                  "value": "ABC-1D23"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Motoristas",
+      "description": "Gerenciamento de motoristas",
+      "item": [
+        {
+          "name": "Cadastrar Motorista (ADMIN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.environment.set(\"motoristaCpf\", \"12345678901\");",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Carlos Silva\",\n  \"cnh\": \"98765432101\",\n  \"categoriaCnh\": \"D\",\n  \"dataValidadeCnh\": \"2026/12\",\n  \"cpf\": \"12345678901\",\n  \"telefone\": \"11987-6543\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/motoristas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "motoristas"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Listar Todos os Motoristas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/motoristas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "motoristas"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Buscar Motorista por CPF",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/motoristas/12345678901",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "motoristas",
+                "12345678901"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Atualizar Telefone do Motorista (ADMIN)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cpf\": \"12345678901\",\n  \"novoTelefone\": \"11998-7654\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/motoristas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "motoristas"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deletar Motorista (ADMIN)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/motoristas?cpf=12345678901",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "motoristas"
+              ],
+              "query": [
+                {
+                  "key": "cpf",
+                  "value": "12345678901"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Passageiros",
+      "description": "Gerenciamento de passageiros",
+      "item": [
+        {
+          "name": "Buscar Passageiro por CPF",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/passageiros/12345678901",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "passageiros",
+                "12345678901"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Listar Todos os Passageiros (ADMIN)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/passageiros",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "passageiros"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Atualizar Passageiro",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Maria Santos\",\n  \"telefone\": \"11999-8888\",\n  \"email\": \"maria@example.com\",\n  \"intituicaoEnsino\": \"UNESP\",\n  \"turno\": \"Tarde\",\n  \"Endereco\": \"Avenida Principal, 456, Bairro B, Cidade, SP\",\n  \"cep\": \"54321-987\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/passageiros/12345678901",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "passageiros",
+                "12345678901"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deletar Passageiro",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/passageiros/12345678901",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "passageiros",
+                "12345678901"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Viagens",
+      "description": "Gerenciamento de viagens de transporte",
+      "item": [
+        {
+          "name": "Criar Viagem",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.environment.set(\"viagemCodigo\", jsonData.codigo);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rotaId\": \"550e8400-e29b-41d4-a716-446655440000\",\n  \"veiculoId\": \"550e8400-e29b-41d4-a716-446655440001\",\n  \"motoristaId\": \"550e8400-e29b-41d4-a716-446655440002\",\n  \"dataViagem\": \"2026-04-20\",\n  \"horarioSaidaPrevisto\": \"07:00\",\n  \"horarioChegadaPrevisto\": \"07:45\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/viagens",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "viagens"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Listar Todas as Viagens (ADMIN)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/viagens",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "viagens"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Buscar Viagem por Código",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/viagens/VIAGEM001",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "viagens",
+                "VIAGEM001"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Atualizar Status da Viagem",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/viagens/VIAGEM001",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "viagens",
+                "VIAGEM001"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deletar Viagem",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/viagens/VIAGEM001",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "viagens",
+                "VIAGEM001"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Pagamentos",
+      "description": "Gerenciamento de pagamentos dos passageiros",
+      "item": [
+        {
+          "name": "Criar Pagamento (ADMIN/MOTORISTA)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  var jsonData = pm.response.json();",
+                  "  pm.environment.set(\"pagamentoId\", jsonData.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"passageiroId\": \"550e8400-e29b-41d4-a716-446655440003\",\n  \"competencia\": \"04/2026\",\n  \"valor\": 150.50,\n  \"dataVencimento\": \"2026-04-30\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pagamentos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pagamentos"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Buscar Pagamento Específico (ADMIN/MOTORISTA)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagamentos/550e8400-e29b-41d4-a716-446655440004",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pagamentos",
+                "550e8400-e29b-41d4-a716-446655440004"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Buscar Pagamentos por Passageiro (ADMIN/MOTORISTA)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagamentos/passageiro/550e8400-e29b-41d4-a716-446655440003",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pagamentos",
+                "passageiro",
+                "550e8400-e29b-41d4-a716-446655440003"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Buscar Pagamentos por Competência (ADMIN/MOTORISTA)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagamentos?competencia=04/2026",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pagamentos"
+              ],
+              "query": [
+                {
+                  "key": "competencia",
+                  "value": "04/2026"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Buscar Meus Pagamentos (PASSAGEIRO)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagamentos/meus-pagamentos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pagamentos",
+                "meus-pagamentos"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Atualizar Status do Pagamento (ADMIN/MOTORISTA)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"PAGO\",\n  \"dataPagamento\": \"2026-04-25\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pagamentos/550e8400-e29b-41d4-a716-446655440004/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pagamentos",
+                "550e8400-e29b-41d4-a716-446655440004",
+                "status"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Deletar Pagamento (ADMIN)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pagamentos/550e8400-e29b-41d4-a716-446655440004",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pagamentos",
+                "550e8400-e29b-41d4-a716-446655440004"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userName",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "rotaId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "veiculoPlaca",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "motoristaCpf",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "viagemCodigo",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pagamentoId",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
+

@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vancontrol-postgres
+    environment:
+      POSTGRES_DB: VanControl
+      POSTGRES_USER: ${POSTGRES_USER:-vancontrol}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vancontrol123}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - vancontrol-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vancontrol}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile
+    container_name: vancontrol-app
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/VanControl
+      POSTGRES_USER: ${POSTGRES_USER:-vancontrol}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vancontrol123}
+      APP_ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@vancontrol.com}
+      APP_ADMIN_NAME: ${ADMIN_NAME:-Administrador}
+      APP_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - vancontrol-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  vancontrol-network:
+    driver: bridge
