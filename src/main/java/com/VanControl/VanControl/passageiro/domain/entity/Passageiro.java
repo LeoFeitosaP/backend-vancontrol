@@ -40,6 +40,8 @@ public class Passageiro {
     private String turno;
     private String endereco;
     private String cep;
+    private Double latitude;
+    private Double longitude;
 
     public Passageiro(String telefone, String intituicaoEnsino, String turno,
                       String endereco, String cep) {

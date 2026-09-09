@@ -4,6 +4,8 @@ import com.VanControl.VanControl.common.exception.model.BadRequestException;
 import com.VanControl.VanControl.common.exception.model.ConflictException;
 import com.VanControl.VanControl.common.exception.model.NotFoundException;
 import com.VanControl.VanControl.common.util.SecurityUtils;
+import com.VanControl.VanControl.grafo.domain.entity.ArestaPassageiroVeiculo;
+import com.VanControl.VanControl.grafo.service.EmparelhamentoService;
 import com.VanControl.VanControl.motorista.service.MotoristaService;
 import com.VanControl.VanControl.passageiro.domain.dto.response.PassageiroResumoResponseDto;
 import com.VanControl.VanControl.passageiro.domain.entity.Passageiro;
@@ -24,6 +26,7 @@ import com.VanControl.VanControl.viagemPassageiro.repository.ViagemPassageiroRep
 import com.VanControl.VanControl.viagem.repository.ViagemRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -31,6 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -40,6 +44,7 @@ public class ViagemService {
     private final ViagemRepository viagemRepository;
     private final ViagemPassageiroRepository viagemPassageiroRepository;
     private final PassageiroRepository passageiroRepository;
+    private final EmparelhamentoService emparelhamentoService;
     private final RotaService rotaService;
     private final VeiculoService veiculoService;
     private final MotoristaService motoristaService;
@@ -68,7 +73,23 @@ public class ViagemService {
     }
 
     public Page<ViagemResponseDto> listarTodasViagens(Pageable pageable) {
-        return viagemRepository.findAll(pageable).map(ViagemMapper::converterParaViagemDto);
+        User usuarioLogado = securityUtils.getAuthenticatedUser();
+        if (usuarioLogado.getRole() != Role.PASSAGEIRO) {
+            // ADMIN/MOTORISTA: mantém comportamento atual, sem personalização
+            return viagemRepository.findAll(pageable).map(ViagemMapper::converterParaViagemDto);
+        }
+        var passageiro = passageiroRepository.findByUser_Cpf(usuarioLogado.getCpf())
+                .orElseThrow(() -> new NotFoundException("Passageiro não encontrado"));
+        var viagensNaoConcluidas = viagemRepository.findAll().stream()
+                .filter(v -> !v.isViagemConcluida())
+                .toList();
+        var recomendadas = emparelhamentoService.recomendarViagensParaPassageiro(passageiro, viagensNaoConcluidas);
+        var dtosOrdenados = recomendadas.stream()
+                .map(ArestaPassageiroVeiculo::viagem)
+                .map(ViagemMapper::converterParaViagemDto)
+                .toList();
+
+        return paginarManualmente(dtosOrdenados, pageable);
     }
 
     public ViagemDefaultResponseDto atualizarStatusViagem(String codigo) {
@@ -214,5 +235,12 @@ public class ViagemService {
         if (LocalDate.now().isAfter(limite)) {
             throw new BadRequestException("Associar passageiro permitido apenas até um dia antes da viagem");
         }
+    }
+
+    private Page<ViagemResponseDto> paginarManualmente(List<ViagemResponseDto> lista, Pageable pageable) {
+        int inicio = (int) pageable.getOffset();
+        if (inicio >= lista.size()) return new PageImpl<>(List.of(), pageable, lista.size());
+        int fim = Math.min(inicio + pageable.getPageSize(), lista.size());
+        return new PageImpl<>(lista.subList(inicio, fim), pageable, lista.size());
     }
 }
