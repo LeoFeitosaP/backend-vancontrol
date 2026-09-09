@@ -28,6 +28,9 @@ public class Veiculo {
     private String renavam;
     @Enumerated(EnumType.STRING)
     private StatusEnum status;
+    private String enderecoInicial;
+    private Double latitude;
+    private Double longitude;
 
     public Veiculo(String placa, String marca, String modelo, int ano, int capacidade, String renavam, String status) {
         this.placa = placa;
