@@ -5,39 +5,41 @@ import com.VanControl.VanControl.grafo.domain.dto.Coordenadas;
 import com.VanControl.VanControl.grafo.domain.dto.external.NominatimResponse;
 import com.VanControl.VanControl.grafo.domain.dto.external.OsrmResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
-import java.net.URLEncoder;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class GeoLocalizacaoService {
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
+
+    private static final String NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 
     public Coordenadas geocodificar(String endereco, String cep) {
-        String query = URLEncoder.encode(endereco + " " + cep, StandardCharsets.UTF_8);
-        String url = "https://nominatim.openstreetmap.org/search?q=" + query + "&format=json&limit=1";
+        // 1ª tentativa: endereço completo
+        Coordenadas resultado = tentarGeocodificar(endereco);
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("User-Agent", "VanControl/1.0 (contato@vancontrol.com)");
-        HttpEntity<Void> req = new HttpEntity<>(headers);
-
-        ResponseEntity<NominatimResponse[]> resp =
-                restTemplate.exchange(url, HttpMethod.GET, req, NominatimResponse[].class);
-
-        if (resp.getBody() == null || resp.getBody().length == 0) {
-            throw new BadRequestException("Não foi possível geocodificar o endereço informado");
+        // 2ª tentativa (fallback): endereço + cep, caso o endereço sozinho seja ambíguo demais
+        if (resultado == null && cep != null && !cep.isBlank()) {
+            resultado = tentarGeocodificar(endereco + ", " + cep);
         }
-        var r = resp.getBody()[0];
-        return new Coordenadas(Double.parseDouble(r.lat()), Double.parseDouble(r.lon()));
+
+        if (resultado == null) {
+            throw new BadRequestException(
+                    "Não foi possível geocodificar o endereço informado: " + endereco);
+        }
+        return resultado;
     }
 
     public double calcularDistanciaKm(double lat1, double lon1, double lat2, double lon2) {
@@ -54,15 +56,45 @@ public class GeoLocalizacaoService {
         }
     }
 
+    private Coordenadas tentarGeocodificar(String textoBusca) {
+        URI uri = UriComponentsBuilder.fromUriString(NOMINATIM_URL)
+                .queryParam("q", textoBusca)
+                .queryParam("format", "json")
+                .queryParam("limit", 1)
+                .queryParam("countrycodes", "br")
+                .build()
+                .encode(StandardCharsets.UTF_8)
+                .toUri();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("User-Agent", "VanControl/1.0 (contato@vancontrol.com)");
+        HttpEntity<Void> req = new HttpEntity<>(headers);
+
+        try {
+            log.info("Chamando Nominatim: {}", uri);
+            var resp = restTemplate.exchange(uri, HttpMethod.GET, req, NominatimResponse[].class);
+
+            int qtd = resp.getBody() == null ? 0 : resp.getBody().length;
+            log.info("Nominatim respondeu {} com {} resultado(s)", resp.getStatusCode(), qtd);
+
+            if (qtd == 0) return null;
+
+            var r = resp.getBody()[0];
+            return new Coordenadas(Double.parseDouble(r.lat()), Double.parseDouble(r.lon()));
+        } catch (Exception e) {
+            log.error("Erro ao chamar Nominatim para '{}': {}", textoBusca, e.getMessage());
+            return null;
+        }
+    }
+
     private double distanciaHaversine(double lat1, double lon1, double lat2, double lon2) {
         final double R = 6371; // raio da Terra em km
         double dLat = Math.toRadians(lat2 - lat1);
         double dLon = Math.toRadians(lon2 - lon1);
-        double a = Math.sin(dLat/2) * Math.sin(dLat/2)
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
                 + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
-                * Math.sin(dLon/2) * Math.sin(dLon/2);
+                * Math.sin(dLon / 2) * Math.sin(dLon / 2);
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
     }
 }
-
