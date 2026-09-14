@@ -9,7 +9,7 @@ import java.time.YearMonth;
 public record CadastrarMotoristaRequestDto(
         @Pattern(regexp = "^[A-ZÀ-Ÿ][a-zà-ÿ]+(?: [A-ZÀ-Ÿ][a-zà-ÿ]+)*$", message = "Insira seu nome completo, iniciando com letra maiúscula")
         @NotBlank(message = "Insira o nome do motorista")
-        String nome,
+        String name,
         @Email(message = "Insira um email válido")
         @NotBlank(message = "Insira o email do motorista")
         String email,

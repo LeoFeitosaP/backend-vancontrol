@@ -32,29 +32,51 @@ public class CredentialsService {
     public ResponseDTO registrarUsuario(RegisterRequestDTO dto) {
         Optional<User> user = this.userRepository.findByEmail(dto.email());
 
-        if(user.isEmpty()) {
-            User newUser = new User();
-            newUser.setPassword(passwordEncoder.encode(dto.password()));
-            newUser.setEmail(dto.email());
-            newUser.setName(dto.name());
-            newUser.setCpf(dto.cpf());
-            if (dto.instituicaoEnsino() == null) {
-                newUser.setRole(Role.MOTORISTA);
-            } else {
-                newUser.setRole(Role.PASSAGEIRO);
-            }
-            this.userRepository.save(newUser);
-
-            if (newUser.getRole() == Role.PASSAGEIRO) {
-                this.passageiroService.cadastrarPassageiro(dto, newUser);
-            }
-
-            String token = this.tokenService.generateToken(newUser);
-            return new ResponseDTO(newUser.getName(), token);
+        if (user.isPresent()) {
+            throw new ConflictException("Passageiro já cadastrado");
         }
 
-        throw new ConflictException("Passageiro já cadastrado");
+        User newUser = new User();
+        newUser.setPassword(passwordEncoder.encode(dto.password()));
+        newUser.setEmail(dto.email());
+        newUser.setName(dto.name());
+        newUser.setCpf(dto.cpf());
+        newUser.setRole(Role.PASSAGEIRO);
+
+        userRepository.save(newUser);
+
+        passageiroService.cadastrarPassageiro(dto, newUser);
+
+        String token = tokenService.generateToken(newUser);
+
+        return new ResponseDTO(
+                newUser.getName(),
+                token
+        );
     }
+
+    private User criarUsuario(RegisterRequestDTO dto, Role role) {
+
+        Optional<User> user = userRepository.findByEmail(dto.email());
+
+        if (user.isPresent()) {
+            throw new ConflictException("Usuário já cadastrado");
+        }
+
+        User newUser = new User();
+        newUser.setPassword(passwordEncoder.encode(dto.password()));
+        newUser.setEmail(dto.email());
+        newUser.setName(dto.name());
+        newUser.setCpf(dto.cpf());
+
+        newUser.setRole(role);
+
+        return userRepository.save(newUser);
+    }
+
+    public User criarUsuarioMotorista(RegisterRequestDTO dto){
+        return criarUsuario(dto, Role.MOTORISTA);
+}
 
     public ResponseDTO login(LoginRequestDTO dto) {
         User user = this.userRepository.findByEmail(dto.email()).orElseThrow(() -> new NotFoundException("User not found"));
