@@ -27,6 +27,8 @@ import com.VanControl.VanControl.viagem.repository.ViagemRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -56,7 +58,7 @@ public class ViagemService {
         var motorista = motoristaService.buscarMotoristaPorCpf(dto.cpfMotorista());
 
         var viagem = ViagemMapper.converterParaViagem(dto);
-        viagem.setDocumentoMotorista(motorista.nome());
+        viagem.setDocumentoMotorista(motorista.cpf());
 
         viagem.setCodigoViagem(
                 "VIA-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase()
@@ -66,7 +68,7 @@ public class ViagemService {
         return new ViagemDefaultResponseDto("Viagem cadastrada.");
     }
 
-    public ViagemResponseDto buscarViagemPorCodigo(String codigo){
+    public ViagemResponseDto buscarViagemPorCodigo(String codigo) {
         var viagem = buscarViagemPorCodigoInterno(codigo);
         validarAcessoViagem(viagem);
         return ViagemMapper.converterParaViagemDto(viagem);
@@ -74,16 +76,24 @@ public class ViagemService {
 
     public Page<ViagemResponseDto> listarTodasViagens(Pageable pageable) {
         User usuarioLogado = securityUtils.getAuthenticatedUser();
+
         if (usuarioLogado.getRole() != Role.PASSAGEIRO) {
-            // ADMIN/MOTORISTA: mantém comportamento atual, sem personalização
-            return viagemRepository.findAll(pageable).map(ViagemMapper::converterParaViagemDto);
+            return viagemRepository.findAll(pageable)
+                    .map(ViagemMapper::converterParaViagemDto);
         }
+
         var passageiro = passageiroRepository.findByUser_Cpf(usuarioLogado.getCpf())
                 .orElseThrow(() -> new NotFoundException("Passageiro não encontrado"));
+
         var viagensNaoConcluidas = viagemRepository.findAll().stream()
                 .filter(v -> !v.isViagemConcluida())
                 .toList();
-        var recomendadas = emparelhamentoService.recomendarViagensParaPassageiro(passageiro, viagensNaoConcluidas);
+
+        var recomendadas = emparelhamentoService.recomendarViagensParaPassageiro(
+                passageiro,
+                viagensNaoConcluidas
+        );
+
         var dtosOrdenados = recomendadas.stream()
                 .map(ArestaPassageiroVeiculo::viagem)
                 .map(ViagemMapper::converterParaViagemDto)
@@ -96,7 +106,9 @@ public class ViagemService {
         var viagem = buscarViagemPorCodigoInterno(codigo);
         viagem.setViagemConcluida(true);
         viagemRepository.save(viagem);
-        return new ViagemDefaultResponseDto("Status da viagem atualizado para concluída.");
+        return new ViagemDefaultResponseDto(
+                "Status da viagem atualizado para concluída."
+        );
     }
 
     @Transactional
@@ -111,11 +123,18 @@ public class ViagemService {
         var passageiro = buscarPassageiroPorCpfInterno(cpf);
 
         if (viagem.isViagemConcluida()) {
-            throw new BadRequestException("Viagem concluída não permite novas associações");
+            throw new BadRequestException(
+                    "Viagem concluída não permite novas associações"
+            );
         }
 
-        if (viagemPassageiroRepository.existsByViagem_IdAndPassageiro_Id(viagem.getId(), passageiro.getId())) {
-            throw new ConflictException("Passageiro já está associado a esta viagem");
+        if (viagemPassageiroRepository.existsByViagem_IdAndPassageiro_Id(
+                viagem.getId(),
+                passageiro.getId()
+        )) {
+            throw new ConflictException(
+                    "Passageiro já está associado a esta viagem"
+            );
         }
 
         validarLimiteCapacidade(viagem);
@@ -136,18 +155,27 @@ public class ViagemService {
         var viagem = buscarViagemPorCodigoInterno(codigo);
         var passageiro = buscarPassageiroPorCpfInterno(cpf);
 
-        if (!viagemPassageiroRepository.existsByViagem_IdAndPassageiro_Id(viagem.getId(), passageiro.getId())) {
+        if (!viagemPassageiroRepository.existsByViagem_IdAndPassageiro_Id(
+                viagem.getId(),
+                passageiro.getId()
+        )) {
             throw new NotFoundException("Associação não encontrada");
         }
 
-        viagemPassageiroRepository.deleteByViagem_IdAndPassageiro_Id(viagem.getId(), passageiro.getId());
+        viagemPassageiroRepository.deleteByViagem_IdAndPassageiro_Id(
+                viagem.getId(),
+                passageiro.getId()
+        );
+
         return new ViagemDefaultResponseDto("Passageiro removido da viagem.");
     }
 
     public ViagemPassageirosResponseDto listarPassageirosPorViagem(String codigo) {
         var viagem = buscarViagemPorCodigoInterno(codigo);
         var veiculo = veiculoService.buscarVeiculoPorPlaca(viagem.getPlacaVeiculo());
-        var passageiros = viagemPassageiroRepository.findByViagem_Id(viagem.getId()).stream()
+
+        var passageiros = viagemPassageiroRepository.findByViagem_Id(viagem.getId())
+                .stream()
                 .map(ViagemPassageiro::getPassageiro)
                 .map(this::converterParaResumo)
                 .toList();
@@ -162,12 +190,81 @@ public class ViagemService {
         );
     }
 
-    public Page<ViagemResumoResponseDto> listarViagensPorPassageiroCpf(String cpf, Pageable pageable) {
+    @Transactional(readOnly = true)
+    public Page<ViagemResumoResponseDto> listarViagensPorPassageiroCpf(
+            String cpf,
+            Pageable pageable
+    ) {
         var passageiro = buscarPassageiroPorCpfInterno(cpf);
+        var pageableConsulta = prepararPaginacaoViagensPassageiro(pageable);
 
-        return viagemPassageiroRepository.findByPassageiro_Id(passageiro.getId(), pageable)
+        var pagina = viagemPassageiroRepository.findByPassageiro_Id(
+                passageiro.getId(),
+                pageableConsulta
+        );
+
+        var conteudo = pagina.getContent().stream()
                 .map(ViagemPassageiro::getViagem)
-                .map(this::converterParaResumo);
+                .map(this::converterParaResumo)
+                .toList();
+
+        return new PageImpl<>(
+                conteudo,
+                pageable,
+                pagina.getTotalElements()
+        );
+    }
+
+    private Pageable prepararPaginacaoViagensPassageiro(Pageable pageable) {
+        Sort ordenacao = pageable.getSort().isSorted()
+                ? pageable.getSort()
+                : Sort.by(Sort.Direction.DESC, "dataViagem");
+
+        List<Sort.Order> ordens = ordenacao.stream()
+                .map(ordem -> ordem.withProperty(
+                        propriedadeOrdenacaoViagensPassageiro(ordem.getProperty())
+                ))
+                .toList();
+
+        Sort ordenacaoConsulta = Sort.by(ordens);
+
+        if (ordenacaoConsulta.getOrderFor("id") == null) {
+            ordenacaoConsulta = ordenacaoConsulta.and(Sort.by("id"));
+        }
+
+        if (pageable.isUnpaged()) {
+            return Pageable.unpaged(ordenacaoConsulta);
+        }
+
+        return PageRequest.of(
+                pageable.getPageNumber(),
+                pageable.getPageSize(),
+                ordenacaoConsulta
+        );
+    }
+
+    private String propriedadeOrdenacaoViagensPassageiro(String propriedade) {
+        return switch (propriedade) {
+            case "codigoViagem", "viagem.codigoViagem" ->
+                    "viagem.codigoViagem";
+            case "codigoRota", "viagem.codigoRota" ->
+                    "viagem.codigoRota";
+            case "placaVeiculo", "viagem.placaVeiculo" ->
+                    "viagem.placaVeiculo";
+            case "dataViagem", "viagem.dataViagem" ->
+                    "viagem.dataViagem";
+            case "horarioSaidaPrevisto", "viagem.horarioSaidaPrevisto" ->
+                    "viagem.horarioSaidaPrevisto";
+            case "horarioChegadaPrevisto", "viagem.horarioChegadaPrevisto" ->
+                    "viagem.horarioChegadaPrevisto";
+            case "viagemConcluida", "viagem.viagemConcluida" ->
+                    "viagem.viagemConcluida";
+            case "dataAssociacao", "id" -> propriedade;
+            default -> throw new BadRequestException(
+                    "Campo de ordenação inválido para viagens do passageiro: "
+                            + propriedade
+            );
+        };
     }
 
     private PassageiroResumoResponseDto converterParaResumo(Passageiro passageiro) {
@@ -192,9 +289,11 @@ public class ViagemService {
 
     private Viagem buscarViagemPorCodigoInterno(String codigo) {
         var viagem = viagemRepository.findByCodigoViagem(codigo);
+
         if (viagem == null) {
             throw new NotFoundException("Viagem não encontrada");
         }
+
         return viagem;
     }
 
@@ -213,7 +312,12 @@ public class ViagemService {
         var passageiro = passageiroRepository.findByUser_Cpf(user.getCpf())
                 .orElseThrow(() -> new AccessDeniedException("Acesso negado"));
 
-        boolean associado = viagemPassageiroRepository.existsByViagem_IdAndPassageiro_Id(viagem.getId(), passageiro.getId());
+        boolean associado = viagemPassageiroRepository
+                .existsByViagem_IdAndPassageiro_Id(
+                        viagem.getId(),
+                        passageiro.getId()
+                );
+
         if (!associado) {
             throw new AccessDeniedException("Acesso negado");
         }
@@ -233,14 +337,28 @@ public class ViagemService {
         LocalDate limite = dataViagem.minusDays(1);
 
         if (LocalDate.now().isAfter(limite)) {
-            throw new BadRequestException("Associar passageiro permitido apenas até um dia antes da viagem");
+            throw new BadRequestException(
+                    "Associar passageiro permitido apenas até um dia antes da viagem"
+            );
         }
     }
 
-    private Page<ViagemResponseDto> paginarManualmente(List<ViagemResponseDto> lista, Pageable pageable) {
+    private Page<ViagemResponseDto> paginarManualmente(
+            List<ViagemResponseDto> lista,
+            Pageable pageable
+    ) {
         int inicio = (int) pageable.getOffset();
-        if (inicio >= lista.size()) return new PageImpl<>(List.of(), pageable, lista.size());
+
+        if (inicio >= lista.size()) {
+            return new PageImpl<>(List.of(), pageable, lista.size());
+        }
+
         int fim = Math.min(inicio + pageable.getPageSize(), lista.size());
-        return new PageImpl<>(lista.subList(inicio, fim), pageable, lista.size());
+
+        return new PageImpl<>(
+                lista.subList(inicio, fim),
+                pageable,
+                lista.size()
+        );
     }
 }
