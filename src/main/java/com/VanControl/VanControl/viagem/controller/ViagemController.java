@@ -3,9 +3,9 @@ package com.VanControl.VanControl.viagem.controller;
 import com.VanControl.VanControl.common.util.SecurityUtils;
 import com.VanControl.VanControl.viagem.domain.dto.request.CriarViagemRequestDto;
 import com.VanControl.VanControl.viagem.domain.dto.response.ViagemDefaultResponseDto;
-import com.VanControl.VanControl.viagemPassageiro.domain.dto.ViagemPassageirosResponseDto;
 import com.VanControl.VanControl.viagem.domain.dto.response.ViagemResponseDto;
 import com.VanControl.VanControl.viagem.service.ViagemService;
+import com.VanControl.VanControl.viagemPassageiro.domain.dto.ViagemPassageirosResponseDto;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -18,7 +18,14 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/viagens")
@@ -36,8 +43,13 @@ public class ViagemController {
             summary = "Cadastrar viagem",
             description = "Entrada: CriarViagemRequestDto (codigoRota, placaVeiculo, cpfMotorista, dataViagem, horarioSaidaPrevisto, horarioChegadaPrevisto). Saida: ViagemDefaultResponseDto com mensagem."
     )
-    public ResponseEntity<ViagemDefaultResponseDto> cadastrarViagem(@RequestBody @Valid CriarViagemRequestDto dto) {
-        return new ResponseEntity<>(viagemService.cadastrarViagem(dto), HttpStatus.CREATED);
+    public ResponseEntity<ViagemDefaultResponseDto> cadastrarViagem(
+            @RequestBody @Valid CriarViagemRequestDto dto
+    ) {
+        return new ResponseEntity<>(
+                viagemService.cadastrarViagem(dto),
+                HttpStatus.CREATED
+        );
     }
 
     @GetMapping("/{codigo}")
@@ -46,8 +58,13 @@ public class ViagemController {
             summary = "Buscar viagem por codigo",
             description = "Entrada: codigo (path). Saida: ViagemResponseDto (codigoRota, placaVeiculo, cpfMotorista, dataViagem, horarioSaidaPrevisto, horarioChegadaPrevisto, viagemConcuida)."
     )
-    public ResponseEntity<ViagemResponseDto> buscarViagemPorCodigo(@PathVariable String codigo) {
-        return new ResponseEntity<>(viagemService.buscarViagemPorCodigo(codigo), HttpStatus.OK);
+    public ResponseEntity<ViagemResponseDto> buscarViagemPorCodigo(
+            @PathVariable String codigo
+    ) {
+        return new ResponseEntity<>(
+                viagemService.buscarViagemPorCodigo(codigo),
+                HttpStatus.OK
+        );
     }
 
     @PostMapping("/{codigo}/passageiros/{cpf}")
@@ -56,20 +73,34 @@ public class ViagemController {
             summary = "Associar passageiro a viagem",
             description = "Entrada: codigo e cpf (path). Saida: ViagemDefaultResponseDto com mensagem."
     )
-    public ResponseEntity<ViagemDefaultResponseDto> associarPassageiro(@PathVariable String codigo, @PathVariable String cpf) {
+    public ResponseEntity<ViagemDefaultResponseDto> associarPassageiro(
+            @PathVariable String codigo,
+            @PathVariable String cpf
+    ) {
         securityUtils.validateCpfAccess(cpf);
-        return new ResponseEntity<>(viagemService.adicionarPassageiro(codigo, cpf), HttpStatus.OK);
+
+        return new ResponseEntity<>(
+                viagemService.adicionarPassageiro(codigo, cpf),
+                HttpStatus.OK
+        );
     }
 
     @DeleteMapping("/{codigo}/passageiros/{cpf}")
-    @PreAuthorize("hasAnyRole('ADMIN','MOTORISTA','PASSGEIRO')")
+    @PreAuthorize("hasAnyRole('ADMIN','MOTORISTA','PASSAGEIRO')")
     @Operation(
             summary = "Remover passageiro da viagem",
             description = "Entrada: codigo e cpf (path). Saida: ViagemDefaultResponseDto com mensagem."
     )
-    public ResponseEntity<ViagemDefaultResponseDto> removerPassageiro(@PathVariable String codigo, @PathVariable String cpf) {
+    public ResponseEntity<ViagemDefaultResponseDto> removerPassageiro(
+            @PathVariable String codigo,
+            @PathVariable String cpf
+    ) {
         securityUtils.validateCpfAccess(cpf);
-        return new ResponseEntity<>(viagemService.removerPassageiro(codigo, cpf), HttpStatus.OK);
+
+        return new ResponseEntity<>(
+                viagemService.removerPassageiro(codigo, cpf),
+                HttpStatus.OK
+        );
     }
 
     @GetMapping("/{codigo}/passageiros")
@@ -78,8 +109,13 @@ public class ViagemController {
             summary = "Listar passageiros da viagem",
             description = "Entrada: codigo (path). Saida: ViagemPassageirosResponseDto com capacidade, ocupacao e lista de passageiros."
     )
-    public ResponseEntity<ViagemPassageirosResponseDto> listarPassageiros(@PathVariable String codigo) {
-        return new ResponseEntity<>(viagemService.listarPassageirosPorViagem(codigo), HttpStatus.OK);
+    public ResponseEntity<ViagemPassageirosResponseDto> listarPassageiros(
+            @PathVariable String codigo
+    ) {
+        return new ResponseEntity<>(
+                viagemService.listarPassageirosPorViagem(codigo),
+                HttpStatus.OK
+        );
     }
 
     @GetMapping
@@ -87,8 +123,18 @@ public class ViagemController {
             summary = "Listar todas as viagens",
             description = "Saida: lista de ViagemResponseDto (codigoRota, placaVeiculo, cpfMotorista, dataViagem, horarioSaidaPrevisto, horarioChegadaPrevisto, viagemConcuida)."
     )
-    public ResponseEntity<Page<ViagemResponseDto>> listarTodasViagens(@PageableDefault(size = 10, page = 0, sort = "dataViagem", direction = Sort.Direction.DESC) Pageable pageable) {
-        return new ResponseEntity<>(viagemService.listarTodasViagens(pageable), HttpStatus.OK);
+    public ResponseEntity<Page<ViagemResponseDto>> listarTodasViagens(
+            @PageableDefault(
+                    size = 10,
+                    page = 0,
+                    sort = "dataViagem",
+                    direction = Sort.Direction.DESC
+            ) Pageable pageable
+    ) {
+        return new ResponseEntity<>(
+                viagemService.listarTodasViagens(pageable),
+                HttpStatus.OK
+        );
     }
 
     @PutMapping("/{codigo}")
@@ -97,8 +143,13 @@ public class ViagemController {
             summary = "Atualizar status da viagem",
             description = "Entrada: codigo (path). Saida: ViagemDefaultResponseDto com mensagem."
     )
-    public ResponseEntity<ViagemDefaultResponseDto> atualizarStatusViagem(@PathVariable String codigo) {
-        return new ResponseEntity<>(viagemService.atualizarStatusViagem(codigo), HttpStatus.OK);
+    public ResponseEntity<ViagemDefaultResponseDto> atualizarStatusViagem(
+            @PathVariable String codigo
+    ) {
+        return new ResponseEntity<>(
+                viagemService.atualizarStatusViagem(codigo),
+                HttpStatus.OK
+        );
     }
 
     @DeleteMapping("/{codigo}")
@@ -107,7 +158,12 @@ public class ViagemController {
             summary = "Deletar viagem",
             description = "Entrada: codigo (path). Saida: ViagemDefaultResponseDto com mensagem."
     )
-    public ResponseEntity<ViagemDefaultResponseDto> deletarViagem(@PathVariable String codigo) {
-        return new ResponseEntity<>(viagemService.deletarViagem(codigo), HttpStatus.OK);
+    public ResponseEntity<ViagemDefaultResponseDto> deletarViagem(
+            @PathVariable String codigo
+    ) {
+        return new ResponseEntity<>(
+                viagemService.deletarViagem(codigo),
+                HttpStatus.OK
+        );
     }
 }
