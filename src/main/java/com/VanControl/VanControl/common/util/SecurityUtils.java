@@ -4,7 +4,7 @@ import com.VanControl.VanControl.user.domain.enums.Role;
 import com.VanControl.VanControl.user.domain.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.core.Authentication; // <-- Adicionei este import
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 

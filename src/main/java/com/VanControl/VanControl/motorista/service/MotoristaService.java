@@ -9,7 +9,7 @@ import com.VanControl.VanControl.motorista.domain.dto.response.MotoristaResponse
 import com.VanControl.VanControl.motorista.domain.entity.Motorista;
 import com.VanControl.VanControl.motorista.mapper.MotoristaMapper;
 import com.VanControl.VanControl.motorista.repository.MotoristaRepository;
-import com.VanControl.VanControl.common.Service.CredentialsService;
+import com.VanControl.VanControl.common.service.CredentialsService;
 import com.VanControl.VanControl.user.domain.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -37,7 +37,7 @@ public class MotoristaService {
 
         motorista.setUser(user);
         motoristaRepository.save(motorista);
-        return new MotoristaDefaultResponseDto("Motorista cadastrado com sucesso"); 
+        return new MotoristaDefaultResponseDto("Motorista cadastrado com sucesso");
     }
 
     public MotoristaResponseDto buscarMotoristaPorCpf(String cpf) {

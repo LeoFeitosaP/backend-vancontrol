@@ -1,6 +1,6 @@
 package com.VanControl.VanControl.user.controller;
 
-import com.VanControl.VanControl.common.Service.CredentialsService;
+import com.VanControl.VanControl.common.service.CredentialsService;
 import com.VanControl.VanControl.user.domain.dto.request.ForgotPasswordRequestDto;
 import com.VanControl.VanControl.user.domain.dto.request.LoginRequestDTO;
 import com.VanControl.VanControl.user.domain.dto.request.RegisterRequestDTO;

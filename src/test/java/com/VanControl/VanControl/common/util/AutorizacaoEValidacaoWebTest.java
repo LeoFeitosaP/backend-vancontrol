@@ -1,6 +1,6 @@
 package com.VanControl.VanControl.common.util;
 
-import com.VanControl.VanControl.common.Service.CredentialsService;
+import com.VanControl.VanControl.common.service.CredentialsService;
 import com.VanControl.VanControl.common.exception.GlobalExceptionHandler;
 import com.VanControl.VanControl.common.exception.model.NotFoundException;
 import com.VanControl.VanControl.common.security.CustomAccessDeniedHandler;
