@@ -45,7 +45,7 @@ public class AuthController {
     @PostMapping("/register")
     @Operation(
             summary = "Registrar usuario",
-            description = "Entrada: RegisterRequestDTO (name, email, password, cpf, telefone, instituicaoEnsino, turno, endereco, cep). Saida: ResponseDTO (name, token)."
+            description = "Entrada: RegisterRequestDTO com endereco estruturado obrigatório (cep e numero; demais dados conhecidos vêm do ViaCEP). Saida: ResponseDTO (name, token)."
     )
     public ResponseEntity<ResponseDTO> register(
             @RequestBody @Valid RegisterRequestDTO dto

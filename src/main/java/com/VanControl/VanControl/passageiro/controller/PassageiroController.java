@@ -34,32 +34,56 @@ public class PassageiroController {
     @GetMapping("/{cpf}")
     @Operation(
             summary = "Buscar passageiro por CPF",
-            description = "Entrada: cpf (path). Saida: PassageiroResponseDto (nome, cpf, telefone, email, intituicaoEnsino, turno, endereco, cep)."
+            description = "Entrada: cpf (path). Saida: PassageiroResponseDto (nome, cpf, telefone, email, intituicaoEnsino, turno, endereco, cep, enderecoDetalhado, enderecoPendente)."
     )
-    public ResponseEntity<PassageiroResponseDto> buscarPassageiroPorCpf(@PathVariable String cpf) {
+    public ResponseEntity<PassageiroResponseDto> buscarPassageiroPorCpf(
+            @PathVariable String cpf
+    ) {
         securityUtils.validateCpfAccess(cpf);
-        return new ResponseEntity<>(passageiroService.buscarPassageiroPorCpf(cpf), HttpStatus.OK);
+
+        return new ResponseEntity<>(
+                passageiroService.buscarPassageiroPorCpf(cpf),
+                HttpStatus.OK
+        );
     }
 
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN','MOTORISTA')")
     @Operation(
             summary = "Listar passageiros",
-            description = "Saida: lista de PassageiroResponseDto (nome, cpf, telefone, email, intituicaoEnsino, turno, endereco, cep)."
+            description = "Saida: lista de PassageiroResponseDto (nome, cpf, telefone, email, intituicaoEnsino, turno, endereco, cep, enderecoDetalhado, enderecoPendente)."
     )
-    public ResponseEntity<Page<PassageiroResponseDto>> buscarTodosPassageiros(@PageableDefault(size = 10, page = 0, sort = "user.name", direction = org.springframework.data.domain.Sort.Direction.ASC) Pageable pageable) {
-        return new ResponseEntity<>(passageiroService.listarPassageiros(pageable), HttpStatus.OK);
+    public ResponseEntity<Page<PassageiroResponseDto>> buscarTodosPassageiros(
+            @PageableDefault(
+                    size = 10,
+                    page = 0,
+                    sort = "user.name",
+                    direction = org.springframework.data.domain.Sort.Direction.ASC
+            )
+            Pageable pageable
+    ) {
+        return new ResponseEntity<>(
+                passageiroService.listarPassageiros(pageable),
+                HttpStatus.OK
+        );
     }
 
     @PutMapping("/{cpf}")
     @PreAuthorize("hasAnyRole('ADMIN','PASSAGEIRO')")
     @Operation(
             summary = "Atualizar passageiro",
-            description = "Entrada: cpf (path) e AtualizarPassageiroRequestDto (nome, telefone, email, intituicaoEnsino, turno, Endereco, cep). Saida: PassageiroResponseDto."
+            description = "Entrada: cpf (path) e AtualizarPassageiroRequestDto (nome, telefone, email, intituicaoEnsino, turno, endereco estruturado opcional). Informar endereco substitui todos os seus campos; omitir preserva o atual. Saida: PassageiroResponseDto."
     )
-    public ResponseEntity<PassageiroResponseDto> atualizarPassageiro(@PathVariable String cpf, @RequestBody @Valid AtualizarPassageiroRequestDto dto) {
+    public ResponseEntity<PassageiroResponseDto> atualizarPassageiro(
+            @PathVariable String cpf,
+            @RequestBody @Valid AtualizarPassageiroRequestDto dto
+    ) {
         securityUtils.validateCpfAccess(cpf);
-        return new ResponseEntity<>(passageiroService.atualizarPassageiro(cpf, dto), HttpStatus.OK);
+
+        return new ResponseEntity<>(
+                passageiroService.atualizarPassageiro(cpf, dto),
+                HttpStatus.OK
+        );
     }
 
     @DeleteMapping("/{cpf}")
@@ -68,8 +92,13 @@ public class PassageiroController {
             summary = "Deletar passageiro",
             description = "Entrada: cpf (path). Saida: PassageiroDefaultResponseDto com mensagem."
     )
-    public ResponseEntity<PassageiroDefaultResponseDto> deletarPassageiro(@PathVariable String cpf) {
-        return new ResponseEntity<>(passageiroService.deletarPassageiro(cpf), HttpStatus.NO_CONTENT);
+    public ResponseEntity<PassageiroDefaultResponseDto> deletarPassageiro(
+            @PathVariable String cpf
+    ) {
+        return new ResponseEntity<>(
+                passageiroService.deletarPassageiro(cpf),
+                HttpStatus.NO_CONTENT
+        );
     }
 
     @GetMapping("/{cpf}/viagens")
@@ -78,8 +107,21 @@ public class PassageiroController {
             summary = "Listar viagens do passageiro",
             description = "Entrada: cpf (path). Saida: lista de ViagemResumoResponseDto."
     )
-    public ResponseEntity<Page<ViagemResumoResponseDto>> listarViagensPorPassageiro(@PathVariable String cpf, @PageableDefault(size = 10, page = 0, sort = "dataViagem", direction = org.springframework.data.domain.Sort.Direction.DESC) Pageable pageable) {
+    public ResponseEntity<Page<ViagemResumoResponseDto>> listarViagensPorPassageiro(
+            @PathVariable String cpf,
+            @PageableDefault(
+                    size = 10,
+                    page = 0,
+                    sort = "dataViagem",
+                    direction = org.springframework.data.domain.Sort.Direction.DESC
+            )
+            Pageable pageable
+    ) {
         securityUtils.validateCpfAccess(cpf);
-        return new ResponseEntity<>(viagemService.listarViagensPorPassageiroCpf(cpf, pageable), HttpStatus.OK);
+
+        return new ResponseEntity<>(
+                viagemService.listarViagensPorPassageiroCpf(cpf, pageable),
+                HttpStatus.OK
+        );
     }
 }

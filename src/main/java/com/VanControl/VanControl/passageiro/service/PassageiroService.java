@@ -3,6 +3,9 @@ package com.VanControl.VanControl.passageiro.service;
 import com.VanControl.VanControl.common.exception.model.BadRequestException;
 import com.VanControl.VanControl.common.exception.model.ConflictException;
 import com.VanControl.VanControl.common.exception.model.NotFoundException;
+import com.VanControl.VanControl.endereco.domain.entity.Endereco;
+import com.VanControl.VanControl.endereco.service.EnderecoService;
+import com.VanControl.VanControl.grafo.repository.PassageiroVeiculoDistanciaRepository;
 import com.VanControl.VanControl.passageiro.domain.dto.request.AtualizarPassageiroRequestDto;
 import com.VanControl.VanControl.passageiro.domain.dto.response.PassageiroDefaultResponseDto;
 import com.VanControl.VanControl.passageiro.domain.dto.response.PassageiroResponseDto;
@@ -16,15 +19,14 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.Objects;
-
-import static com.VanControl.VanControl.passageiro.mapper.PassageiroMapper.converterParaPassageiro;
 
 @Service
 @RequiredArgsConstructor
@@ -32,16 +34,22 @@ public class PassageiroService {
 
     private final PassageiroRepository passageiroRepository;
     private final UserRepository userRepository;
+    private final EnderecoService enderecoService;
+    private final PassageiroVeiculoDistanciaRepository distancias;
+    private final PlatformTransactionManager transactionManager;
 
     @Transactional(propagation = Propagation.MANDATORY)
-    public void cadastrarPassageiro(RegisterRequestDTO dto, User user) {
+    public void cadastrarPassageiro(
+            RegisterRequestDTO dto,
+            User user,
+            Endereco endereco
+    ) {
         if (passageiroRepository.findByUser_Cpf(dto.cpf()).isPresent()) {
             throw new ConflictException("Passageiro já cadastrado");
         }
 
-        var passageiro = converterParaPassageiro(dto);
+        var passageiro = PassageiroMapper.converterParaPassageiro(dto, endereco);
         passageiro.setUser(user);
-
         passageiroRepository.saveAndFlush(passageiro);
     }
 
@@ -57,63 +65,63 @@ public class PassageiroService {
                 .map(PassageiroMapper::converterParaPassageiroResponseDto);
     }
 
-    @Transactional
     public PassageiroResponseDto atualizarPassageiro(
             String cpf,
             AtualizarPassageiroRequestDto dto
     ) {
-        var passageiro = buscarPassageiroPorCpfInterno(cpf);
-        verificarPermissaoAcesso(passageiro);
+        verificarPermissaoAcesso(buscarPassageiroPorCpfInterno(cpf));
 
-        if (dto.nome() != null) {
-            if (passageiro.getUser() != null) {
+        Endereco novoEndereco = dto.endereco() == null
+                ? null
+                : enderecoService.resolver(dto.endereco());
+
+        return new TransactionTemplate(transactionManager).execute(status -> {
+            var passageiro = buscarPassageiroPorCpfInterno(cpf);
+            verificarPermissaoAcesso(passageiro);
+
+            if (dto.email() != null) {
+                if (dto.email().isBlank()) {
+                    throw new BadRequestException("Informe um e-mail válido");
+                }
+
+                userRepository.findByEmail(dto.email()).ifPresent(existente -> {
+                    if (!Objects.equals(
+                            existente.getId(),
+                            passageiro.getUser().getId()
+                    )) {
+                        throw new ConflictException("E-mail já cadastrado");
+                    }
+                });
+
+                passageiro.getUser().setEmail(dto.email());
+            }
+
+            if (dto.nome() != null) {
                 passageiro.getUser().setName(dto.nome());
             }
-        }
 
-        if (dto.telefone() != null) {
-            passageiro.setTelefone(dto.telefone());
-        }
-
-        if (dto.email() != null) {
-            if (dto.email().isBlank()) {
-                throw new BadRequestException("Informe um e-mail válido");
+            if (dto.telefone() != null) {
+                passageiro.setTelefone(dto.telefone());
             }
 
-            userRepository.findByEmail(dto.email()).ifPresent(existente -> {
-                if (!Objects.equals(
-                        existente.getId(),
-                        passageiro.getUser().getId()
-                )) {
-                    throw new ConflictException("E-mail já cadastrado");
-                }
-            });
+            if (dto.intituicaoEnsino() != null) {
+                passageiro.setInstituicaoEnsino(dto.intituicaoEnsino());
+            }
 
-            passageiro.getUser().setEmail(dto.email());
-        }
+            if (dto.turno() != null) {
+                passageiro.setTurno(dto.turno());
+            }
 
-        if (dto.intituicaoEnsino() != null) {
-            passageiro.setInstituicaoEnsino(dto.intituicaoEnsino());
-        }
+            if (novoEndereco != null
+                    && !novoEndereco.equals(passageiro.getEnderecoDetalhado())) {
+                passageiro.definirEndereco(novoEndereco);
+                distancias.deleteByPassageiro_Id(passageiro.getId());
+            }
 
-        if (dto.turno() != null) {
-            passageiro.setTurno(dto.turno());
-        }
-
-        if (dto.Endereco() != null) {
-            passageiro.setEndereco(dto.Endereco());
-        }
-
-        if (dto.cep() != null) {
-            passageiro.setCep(dto.cep());
-        }
-
-        var passageiroAtualizado =
-                passageiroRepository.saveAndFlush(passageiro);
-
-        return PassageiroMapper.converterParaPassageiroResponseDto(
-                passageiroAtualizado
-        );
+            return PassageiroMapper.converterParaPassageiroResponseDto(
+                    passageiroRepository.saveAndFlush(passageiro)
+            );
+        });
     }
 
     @Transactional
@@ -121,6 +129,7 @@ public class PassageiroService {
         var passageiro = buscarPassageiroPorCpfInterno(cpf);
         verificarPermissaoAcesso(passageiro);
 
+        distancias.deleteByPassageiro_Id(passageiro.getId());
         passageiroRepository.delete(passageiro);
 
         return new PassageiroDefaultResponseDto(
@@ -129,27 +138,26 @@ public class PassageiroService {
     }
 
     private void verificarPermissaoAcesso(Passageiro passageiro) {
-        Authentication auth =
-                SecurityContextHolder.getContext().getAuthentication();
+        var auth = SecurityContextHolder.getContext().getAuthentication();
 
-        assert auth != null;
-        var usuarioLogado = (User) auth.getPrincipal();
+        if (auth == null
+                || !auth.isAuthenticated()
+                || !(auth.getPrincipal() instanceof User usuario)) {
+            throw new AccessDeniedException("Acesso negado");
+        }
 
-        boolean hasAdminRole = auth.getAuthorities().stream()
-                .anyMatch(a -> Objects.equals(
-                        a.getAuthority(),
-                        "ROLE_ADMIN"
-                ));
+        boolean admin = auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
 
-        if (!hasAdminRole) {
-            assert usuarioLogado != null;
-
-            if (!Objects.equals(
-                    usuarioLogado.getEmail(),
-                    passageiro.getUser().getEmail()
-            )) {
-                throw new AccessDeniedException("Acesso negado");
-            }
+        if (!admin && (
+                usuario.getId() == null
+                        || passageiro.getUser() == null
+                        || !Objects.equals(
+                        usuario.getId(),
+                        passageiro.getUser().getId()
+                )
+        )) {
+            throw new AccessDeniedException("Acesso negado");
         }
     }
 

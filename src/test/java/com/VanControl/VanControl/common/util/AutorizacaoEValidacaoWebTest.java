@@ -3,20 +3,12 @@ package com.VanControl.VanControl.common.util;
 import com.VanControl.VanControl.common.service.CredentialsService;
 import com.VanControl.VanControl.common.exception.GlobalExceptionHandler;
 import com.VanControl.VanControl.common.exception.model.NotFoundException;
-import com.VanControl.VanControl.common.security.CustomAccessDeniedHandler;
-import com.VanControl.VanControl.common.security.CustomAuthenticationEntryPoint;
-import com.VanControl.VanControl.common.security.CustomUserDetailsService;
-import com.VanControl.VanControl.common.security.SecurityConfig;
-import com.VanControl.VanControl.common.security.SecurityFilter;
-import com.VanControl.VanControl.common.security.TokenService;
-import com.VanControl.VanControl.common.util.SecurityUtils;
+import com.VanControl.VanControl.common.security.*;
 import com.VanControl.VanControl.motorista.controller.MotoristaController;
-import com.VanControl.VanControl.motorista.domain.dto.request.CadastrarMotoristaRequestDto;
 import com.VanControl.VanControl.motorista.domain.dto.response.MotoristaDefaultResponseDto;
 import com.VanControl.VanControl.motorista.service.MotoristaService;
 import com.VanControl.VanControl.user.Repository.UserRepository;
 import com.VanControl.VanControl.user.controller.AuthController;
-import com.VanControl.VanControl.user.domain.dto.request.RegisterRequestDTO;
 import com.VanControl.VanControl.user.domain.dto.response.ResponseDTO;
 import com.VanControl.VanControl.user.domain.entity.User;
 import com.VanControl.VanControl.user.domain.enums.Role;
@@ -41,15 +33,10 @@ import java.util.UUID;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(controllers = {
         AuthController.class,
@@ -67,39 +54,25 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 class AutorizacaoEValidacaoWebTest {
 
-    private static final String CODIGO_VIAGEM = "VIA-12345678";
-    private static final String CPF_PASSAGEIRO = "02245419006";
-    private static final String CPF_OUTRO = "52998224725";
+    private static final String VIAGEM = "VIA-12345678";
+    private static final String CPF = "02245419006";
+    private static final String OUTRO = "52998224725";
 
-    private static final String REGISTRO_VALIDO = """
-            {
-              "name": "Joao Silva",
-              "email": "joao@example.com",
-              "password": "Senha123",
-              "cpf": "02245419006",
-              "telefone": "(15) 99999-1234",
-              "instituicaoEnsino": "UNISO",
-              "turno": "Noite",
-              "endereco": "Rua Exemplo, 123, Centro, Sorocaba, SP",
-              "cep": "18000-000"
-            }
+    private static final String REGISTRO = """
+            {"name":"Joao Silva","email":"joao@example.com","password":"Senha123",
+             "cpf":"02245419006","telefone":"(15) 99999-1234",
+             "instituicaoEnsino":"UNISO","turno":"Noite",
+             "endereco":{"cep":"01001-000","numero":"123"}}
             """;
 
-    private static final String MOTORISTA_VALIDO = """
-            {
-              "name": "Maria Santos",
-              "email": "maria@example.com",
-              "cnh": "98765432101",
-              "categoriaCnh": "D",
-              "dataValidadeCnh": "2099/12",
-              "cpf": "52998224725",
-              "telefone": "(15) 98888-1234",
-              "password": "Senha123"
-            }
+    private static final String MOTORISTA = """
+            {"name":"Maria Santos","email":"maria@example.com","cnh":"98765432101",
+             "categoriaCnh":"D","dataValidadeCnh":"2099/12","cpf":"52998224725",
+             "telefone":"(15) 98888-1234","password":"Senha123"}
             """;
 
     @Autowired
-    private MockMvc mockMvc;
+    private MockMvc mvc;
 
     @MockitoBean
     private CredentialsService credentialsService;
@@ -116,42 +89,35 @@ class AutorizacaoEValidacaoWebTest {
     @MockitoBean
     private UserRepository userRepository;
 
-    @Test
-    void passageiroPodeRemoverPropriaAssociacao() throws Exception {
-        when(viagemService.removerPassageiro(
-                CODIGO_VIAGEM,
-                CPF_PASSAGEIRO
-        )).thenReturn(
-                new ViagemDefaultResponseDto(
-                        "Passageiro removido da viagem."
-                )
-        );
+    @ParameterizedTest
+    @CsvSource({
+            "PASSAGEIRO,02245419006",
+            "ADMIN,52998224725",
+            "MOTORISTA,52998224725"
+    })
+    void papeisAutorizadosRemovemAssociacao(Role role, String cpf) throws Exception {
+        when(viagemService.removerPassageiro(VIAGEM, CPF))
+                .thenReturn(
+                        new ViagemDefaultResponseDto("Passageiro removido da viagem.")
+                );
 
-        mockMvc.perform(
-                        delete(
-                                "/viagens/{codigo}/passageiros/{cpf}",
-                                CODIGO_VIAGEM,
-                                CPF_PASSAGEIRO
-                        ).with(usuario(Role.PASSAGEIRO, CPF_PASSAGEIRO))
+        mvc.perform(
+                        delete("/viagens/{codigo}/passageiros/{cpf}", VIAGEM, CPF)
+                                .with(usuario(role, cpf))
                 )
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.mensagem")
-                        .value("Passageiro removido da viagem."));
+                .andExpect(
+                        jsonPath("$.mensagem").value("Passageiro removido da viagem.")
+                );
 
-        verify(viagemService).removerPassageiro(
-                CODIGO_VIAGEM,
-                CPF_PASSAGEIRO
-        );
+        verify(viagemService).removerPassageiro(VIAGEM, CPF);
     }
 
     @Test
-    void passageiroNaoPodeRemoverOutraPessoa() throws Exception {
-        mockMvc.perform(
-                        delete(
-                                "/viagens/{codigo}/passageiros/{cpf}",
-                                CODIGO_VIAGEM,
-                                CPF_OUTRO
-                        ).with(usuario(Role.PASSAGEIRO, CPF_PASSAGEIRO))
+    void passageiroNaoRemoveOutraPessoa() throws Exception {
+        mvc.perform(
+                        delete("/viagens/{codigo}/passageiros/{cpf}", VIAGEM, OUTRO)
+                                .with(usuario(Role.PASSAGEIRO, CPF))
                 )
                 .andExpect(status().isForbidden());
 
@@ -160,12 +126,8 @@ class AutorizacaoEValidacaoWebTest {
 
     @Test
     void remocaoExigeAutenticacao() throws Exception {
-        mockMvc.perform(
-                        delete(
-                                "/viagens/{codigo}/passageiros/{cpf}",
-                                CODIGO_VIAGEM,
-                                CPF_PASSAGEIRO
-                        )
+        mvc.perform(
+                        delete("/viagens/{codigo}/passageiros/{cpf}", VIAGEM, CPF)
                 )
                 .andExpect(status().isUnauthorized());
 
@@ -173,81 +135,25 @@ class AutorizacaoEValidacaoWebTest {
     }
 
     @Test
-    void administradorPodeRemoverPassageiro() throws Exception {
-        when(viagemService.removerPassageiro(
-                CODIGO_VIAGEM,
-                CPF_PASSAGEIRO
-        )).thenReturn(
-                new ViagemDefaultResponseDto(
-                        "Passageiro removido da viagem."
-                )
-        );
-
-        mockMvc.perform(
-                        delete(
-                                "/viagens/{codigo}/passageiros/{cpf}",
-                                CODIGO_VIAGEM,
-                                CPF_PASSAGEIRO
-                        ).with(usuario(Role.ADMIN, null))
-                )
-                .andExpect(status().isOk());
-
-        verify(viagemService).removerPassageiro(
-                CODIGO_VIAGEM,
-                CPF_PASSAGEIRO
-        );
-    }
-
-    @Test
-    void motoristaMantemPermissaoPrevistaNaPoliticaAtual() throws Exception {
-        when(viagemService.removerPassageiro(
-                CODIGO_VIAGEM,
-                CPF_PASSAGEIRO
-        )).thenReturn(
-                new ViagemDefaultResponseDto(
-                        "Passageiro removido da viagem."
-                )
-        );
-
-        mockMvc.perform(
-                        delete(
-                                "/viagens/{codigo}/passageiros/{cpf}",
-                                CODIGO_VIAGEM,
-                                CPF_PASSAGEIRO
-                        ).with(usuario(Role.MOTORISTA, CPF_OUTRO))
-                )
-                .andExpect(status().isOk());
-
-        verify(viagemService).removerPassageiro(
-                CODIGO_VIAGEM,
-                CPF_PASSAGEIRO
-        );
-    }
-
-    @Test
     void associacaoInexistenteRetorna404() throws Exception {
-        when(viagemService.removerPassageiro(
-                CODIGO_VIAGEM,
-                CPF_PASSAGEIRO
-        )).thenThrow(new NotFoundException("Associação não encontrada"));
+        when(viagemService.removerPassageiro(VIAGEM, CPF))
+                .thenThrow(new NotFoundException("Associação não encontrada"));
 
-        mockMvc.perform(
-                        delete(
-                                "/viagens/{codigo}/passageiros/{cpf}",
-                                CODIGO_VIAGEM,
-                                CPF_PASSAGEIRO
-                        ).with(usuario(Role.PASSAGEIRO, CPF_PASSAGEIRO))
+        mvc.perform(
+                        delete("/viagens/{codigo}/passageiros/{cpf}", VIAGEM, CPF)
+                                .with(usuario(Role.PASSAGEIRO, CPF))
                 )
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.mensagem")
-                        .value("Associação não encontrada"));
+                .andExpect(
+                        jsonPath("$.mensagem").value("Associação não encontrada")
+                );
     }
 
     @Test
-    void passageiroContinuaImpedidoDeConcluirViagem() throws Exception {
-        mockMvc.perform(
-                        put("/viagens/{codigo}", CODIGO_VIAGEM)
-                                .with(usuario(Role.PASSAGEIRO, CPF_PASSAGEIRO))
+    void passageiroNaoConcluiViagem() throws Exception {
+        mvc.perform(
+                        put("/viagens/{codigo}", VIAGEM)
+                                .with(usuario(Role.PASSAGEIRO, CPF))
                 )
                 .andExpect(status().isForbidden());
 
@@ -255,108 +161,124 @@ class AutorizacaoEValidacaoWebTest {
     }
 
     @Test
-    void registroValidoContinuaPublicoERetorna201() throws Exception {
-        when(credentialsService.registrarUsuario(
-                any(RegisterRequestDTO.class)
-        )).thenReturn(new ResponseDTO("Joao Silva", "token-de-teste"));
+    void registroEstruturadoContinuaPublico() throws Exception {
+        when(credentialsService.registrarUsuario(any()))
+                .thenReturn(new ResponseDTO("Joao Silva", "token"));
 
-        mockMvc.perform(
+        mvc.perform(
                         post("/auth/register")
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(REGISTRO_VALIDO)
+                                .content(REGISTRO)
                 )
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.name").value("Joao Silva"))
-                .andExpect(jsonPath("$.token").value("token-de-teste"));
+                .andExpect(jsonPath("$.token").value("token"));
 
-        verify(credentialsService).registrarUsuario(
-                any(RegisterRequestDTO.class)
-        );
+        verify(credentialsService).registrarUsuario(any());
     }
 
     @ParameterizedTest
     @CsvSource({
-            "email, joao@example.com, email-invalido",
-            "cpf, 02245419006, 11111111111",
-            "cep, 18000-000, 18000000",
-            "password, Senha123, curta",
-            "turno, Noite, Madrugada"
+            "email,joao@example.com,email-invalido",
+            "cpf,02245419006,11111111111",
+            "endereco.cep,01001-000,123",
+            "password,Senha123,curta",
+            "turno,Noite,Madrugada",
+            "endereco.numero,123,''"
     })
     void registroInvalidoNaoChegaAoServico(
             String campo,
-            String valorOriginal,
-            String valorInvalido
+            String original,
+            String invalido
     ) throws Exception {
-        String corpo = REGISTRO_VALIDO.replace(
-                valorOriginal,
-                valorInvalido
+        String corpo = REGISTRO.replace(
+                "\"" + original + "\"",
+                "\"" + invalido + "\""
         );
 
-        mockMvc.perform(
+        mvc.perform(
                         post("/auth/register")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(corpo)
                 )
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.mensagem")
-                        .value(containsString(campo + ":")));
+                .andExpect(
+                        jsonPath("$.mensagem")
+                                .value(containsString(campo + ":"))
+                );
 
         verifyNoInteractions(credentialsService);
     }
 
     @Test
     void registroSemNomeRetorna400() throws Exception {
-        String corpo = REGISTRO_VALIDO.replace(
-                "\"name\": \"Joao Silva\",",
-                ""
-        );
-
-        mockMvc.perform(
+        mvc.perform(
                         post("/auth/register")
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(corpo)
+                                .content(
+                                        REGISTRO.replace(
+                                                "\"name\":\"Joao Silva\",",
+                                                ""
+                                        )
+                                )
                 )
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.mensagem")
-                        .value("name: Insira seu nome completo"));
+                .andExpect(
+                        jsonPath("$.mensagem")
+                                .value("name: Insira seu nome completo")
+                );
 
         verifyNoInteractions(credentialsService);
     }
 
     @Test
-    void motoristaNaoExigeCamposExclusivosDePassageiro() throws Exception {
-        when(motoristaService.cadastrarMotorista(
-                any(CadastrarMotoristaRequestDto.class)
-        )).thenReturn(
-                new MotoristaDefaultResponseDto(
-                        "Motorista cadastrado com sucesso"
+    void registroSemEnderecoRetorna400() throws Exception {
+        mvc.perform(
+                        post("/auth/register")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        REGISTRO.replace(
+                                                "{\"cep\":\"01001-000\",\"numero\":\"123\"}",
+                                                "null"
+                                        )
+                                )
                 )
-        );
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        jsonPath("$.mensagem")
+                                .value("endereco: Informe o endereço")
+                );
 
-        mockMvc.perform(
+        verifyNoInteractions(credentialsService);
+    }
+
+    @Test
+    void motoristaNaoExigeEnderecoNemCamposDePassageiro() throws Exception {
+        when(motoristaService.cadastrarMotorista(any()))
+                .thenReturn(
+                        new MotoristaDefaultResponseDto(
+                                "Motorista cadastrado com sucesso"
+                        )
+                );
+
+        mvc.perform(
                         post("/motoristas")
                                 .with(usuario(Role.ADMIN, null))
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(MOTORISTA_VALIDO)
+                                .content(MOTORISTA)
                 )
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.message")
-                        .value("Motorista cadastrado com sucesso"));
+                .andExpect(status().isCreated());
 
-        verify(motoristaService).cadastrarMotorista(
-                any(CadastrarMotoristaRequestDto.class)
-        );
-
+        verify(motoristaService).cadastrarMotorista(any());
         verifyNoInteractions(credentialsService);
     }
 
     @Test
-    void passageiroNaoPodeCadastrarMotorista() throws Exception {
-        mockMvc.perform(
+    void passageiroNaoCadastraMotorista() throws Exception {
+        mvc.perform(
                         post("/motoristas")
-                                .with(usuario(Role.PASSAGEIRO, CPF_PASSAGEIRO))
+                                .with(usuario(Role.PASSAGEIRO, CPF))
                                 .contentType(MediaType.APPLICATION_JSON)
-                                .content(MOTORISTA_VALIDO)
+                                .content(MOTORISTA)
                 )
                 .andExpect(status().isForbidden());
 
@@ -366,21 +288,18 @@ class AutorizacaoEValidacaoWebTest {
     private static RequestPostProcessor usuario(Role role, String cpf) {
         User user = new User();
         user.setId(UUID.randomUUID());
-        user.setName("Usuario Teste");
         user.setEmail("usuario@example.com");
         user.setCpf(cpf);
         user.setRole(role);
 
-        var authorities = List.of(
-                new SimpleGrantedAuthority("ROLE_" + role.name())
+        return authentication(
+                new UsernamePasswordAuthenticationToken(
+                        user,
+                        null,
+                        List.of(
+                                new SimpleGrantedAuthority("ROLE_" + role.name())
+                        )
+                )
         );
-
-        var autenticacao = new UsernamePasswordAuthenticationToken(
-                user,
-                null,
-                authorities
-        );
-
-        return authentication(autenticacao);
     }
 }

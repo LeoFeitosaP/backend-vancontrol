@@ -37,7 +37,6 @@ public class MotoristaMapper {
                 dto.telefone(),
                 null,
                 null,
-                null,
                 null
         );
     }

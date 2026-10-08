@@ -4,6 +4,7 @@ import com.VanControl.VanControl.common.exception.model.BadRequestException;
 import com.VanControl.VanControl.common.exception.model.ConflictException;
 import com.VanControl.VanControl.common.exception.model.NotFoundException;
 import com.VanControl.VanControl.common.security.TokenService;
+import com.VanControl.VanControl.endereco.service.EnderecoService;
 import com.VanControl.VanControl.passageiro.service.PassageiroService;
 import com.VanControl.VanControl.user.Repository.UserRepository;
 import com.VanControl.VanControl.user.domain.dto.request.LoginRequestDTO;
@@ -15,6 +16,8 @@ import com.VanControl.VanControl.user.service.EmailService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,17 +32,22 @@ public class CredentialsService {
     private final PassageiroService passageiroService;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
+    private final EnderecoService enderecoService;
+    private final PlatformTransactionManager transactionManager;
 
-    @Transactional
     public ResponseDTO registrarUsuario(RegisterRequestDTO dto) {
-        User user = criarUsuario(dto, Role.PASSAGEIRO);
-        passageiroService.cadastrarPassageiro(dto, user);
-        userRepository.flush();
+        var endereco = enderecoService.resolver(dto.endereco());
 
-        return new ResponseDTO(
-                user.getName(),
-                tokenService.generateToken(user)
-        );
+        return new TransactionTemplate(transactionManager).execute(status -> {
+            User user = criarUsuario(dto, Role.PASSAGEIRO);
+            passageiroService.cadastrarPassageiro(dto, user, endereco);
+            userRepository.flush();
+
+            return new ResponseDTO(
+                    user.getName(),
+                    tokenService.generateToken(user)
+            );
+        });
     }
 
     @Transactional(propagation = Propagation.MANDATORY)

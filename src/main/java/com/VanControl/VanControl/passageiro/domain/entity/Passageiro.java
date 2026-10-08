@@ -1,5 +1,6 @@
 package com.VanControl.VanControl.passageiro.domain.entity;
 
+import com.VanControl.VanControl.endereco.domain.entity.Endereco;
 import com.VanControl.VanControl.pagamento.domain.entity.Pagamento;
 import com.VanControl.VanControl.viagemPassageiro.domain.entity.ViagemPassageiro;
 import com.VanControl.VanControl.user.domain.entity.User;
@@ -36,19 +37,39 @@ public class Passageiro {
 
     @Column(unique = true)
     private String telefone;
+
     private String instituicaoEnsino;
     private String turno;
+
+    @Column(columnDefinition = "text")
     private String endereco;
+
+    @Embedded
+    private Endereco enderecoDetalhado;
+
     private String cep;
     private Double latitude;
     private Double longitude;
 
-    public Passageiro(String telefone, String intituicaoEnsino, String turno,
-                      String endereco, String cep) {
+    public Passageiro(
+            String telefone,
+            String intituicaoEnsino,
+            String turno,
+            String endereco,
+            String cep
+    ) {
         this.telefone = telefone;
         this.instituicaoEnsino = intituicaoEnsino;
         this.turno = turno;
         this.endereco = endereco;
         this.cep = cep;
+    }
+
+    public void definirEndereco(Endereco novoEndereco) {
+        this.enderecoDetalhado = java.util.Objects.requireNonNull(novoEndereco);
+        this.endereco = novoEndereco.formatar();
+        this.cep = novoEndereco.getCep();
+        this.latitude = null;
+        this.longitude = null;
     }
 }
