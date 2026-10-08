@@ -2,17 +2,18 @@ package com.VanControl.VanControl.viagem.service;
 
 import com.VanControl.VanControl.common.util.SecurityUtils;
 import com.VanControl.VanControl.grafo.service.EmparelhamentoService;
-import com.VanControl.VanControl.motorista.service.MotoristaService;
+import com.VanControl.VanControl.motorista.domain.entity.Motorista;
+import com.VanControl.VanControl.rota.domain.entity.Rota;
+import com.VanControl.VanControl.veiculo.domain.entity.Veiculo;
 import com.VanControl.VanControl.passageiro.domain.entity.Passageiro;
-import com.VanControl.VanControl.rota.service.RotaService;
 import com.VanControl.VanControl.user.domain.entity.User;
 import com.VanControl.VanControl.user.domain.enums.Role;
-import com.VanControl.VanControl.veiculo.service.VeiculoService;
 import com.VanControl.VanControl.viagem.domain.dto.response.ViagemResumoResponseDto;
 import com.VanControl.VanControl.viagem.domain.entity.Viagem;
 import com.VanControl.VanControl.viagemPassageiro.domain.entity.ViagemPassageiro;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
@@ -34,28 +35,45 @@ import static org.junit.jupiter.api.Assertions.*;
 @Import(ViagemService.class)
 class ViagensPassageiroJpaTest {
 
-    @Autowired
-    private EntityManager entityManager;
+    @Autowired private EntityManager entityManager;
+    @Autowired private ViagemService viagemService;
 
-    @Autowired
-    private ViagemService viagemService;
-
-    @MockitoBean
-    private EmparelhamentoService emparelhamentoService;
-
-    @MockitoBean
-    private RotaService rotaService;
-
-    @MockitoBean
-    private VeiculoService veiculoService;
-
-    @MockitoBean
-    private MotoristaService motoristaService;
-
-    @MockitoBean
-    private SecurityUtils securityUtils;
+    @MockitoBean private EmparelhamentoService emparelhamentoService;
+    @MockitoBean private SecurityUtils securityUtils;
 
     private static final String CPF = "02245419006";
+
+    private Rota rota;
+    private Veiculo veiculo;
+    private Motorista motorista;
+
+    @BeforeEach
+    void criarReferencias() {
+        rota = new Rota();
+        rota.setCodigoRota("ROT-TESTE");
+        entityManager.persist(rota);
+
+        veiculo = new Veiculo(
+                "ABC-1D23",
+                "Mercedes",
+                "Sprinter",
+                2024,
+                15,
+                "12345678901",
+                "DISPONIVEL"
+        );
+
+        entityManager.persist(veiculo);
+
+        var user = new User();
+        user.setCpf("11144477735");
+        user.setRole(Role.MOTORISTA);
+        entityManager.persist(user);
+
+        motorista = new Motorista();
+        motorista.setUser(user);
+        entityManager.persist(motorista);
+    }
 
     @Test
     void ordenaNoBancoAntesDePaginarEFiltraPassageiro() {
@@ -163,13 +181,7 @@ class ViagensPassageiroJpaTest {
 
     @Test
     void paginaForaDoIntervaloPreservaTotal() {
-        criarAssociacao(
-                criarPassageiro(CPF),
-                "VIA-UNICA",
-                1,
-                18
-        );
-
+        criarAssociacao(criarPassageiro(CPF), "VIA-UNICA", 1, 18);
         sincronizar();
 
         var pagina = viagemService.listarViagensPorPassageiroCpf(
@@ -198,14 +210,16 @@ class ViagensPassageiroJpaTest {
 
     private List<String> lerTresPaginas() {
         return IntStream.range(0, 3)
-                .mapToObj(numero -> viagemService.listarViagensPorPassageiroCpf(
-                        CPF,
-                        PageRequest.of(
-                                numero,
-                                1,
-                                Sort.by("dataViagem")
-                        )
-                ).getContent().getFirst().codigoViagem())
+                .mapToObj(numero ->
+                        viagemService.listarViagensPorPassageiroCpf(
+                                CPF,
+                                PageRequest.of(
+                                        numero,
+                                        1,
+                                        Sort.by("dataViagem")
+                                )
+                        ).getContent().getFirst().codigoViagem()
+                )
                 .toList();
     }
 
@@ -221,7 +235,6 @@ class ViagensPassageiroJpaTest {
 
         var passageiro = new Passageiro();
         passageiro.setUser(user);
-
         entityManager.persist(passageiro);
 
         return passageiro;
@@ -234,22 +247,23 @@ class ViagensPassageiroJpaTest {
             int hora
     ) {
         var viagem = new Viagem(
-                "ROT-TESTE",
-                "ABC-1D23",
-                "52998224725",
+                rota,
+                veiculo,
+                motorista,
                 LocalDate.of(2099, 10, dia),
                 LocalTime.of(hora, 0),
                 LocalTime.of(hora + 1, 0)
         );
 
         viagem.setCodigoViagem(codigo);
-
         entityManager.persist(viagem);
 
         var associacao = ViagemPassageiro.builder()
                 .viagem(viagem)
                 .passageiro(passageiro)
-                .dataAssociacao(LocalDateTime.of(2099, 9, 1, 12, 0))
+                .dataAssociacao(
+                        LocalDateTime.of(2099, 9, 1, 12, 0)
+                )
                 .build();
 
         entityManager.persist(associacao);

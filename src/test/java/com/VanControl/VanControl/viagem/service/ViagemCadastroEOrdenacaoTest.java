@@ -4,12 +4,15 @@ import com.VanControl.VanControl.common.exception.model.BadRequestException;
 import com.VanControl.VanControl.common.exception.model.NotFoundException;
 import com.VanControl.VanControl.common.util.SecurityUtils;
 import com.VanControl.VanControl.grafo.service.EmparelhamentoService;
-import com.VanControl.VanControl.motorista.domain.dto.response.MotoristaResponseDto;
-import com.VanControl.VanControl.motorista.service.MotoristaService;
+import com.VanControl.VanControl.motorista.domain.entity.Motorista;
+import com.VanControl.VanControl.rota.domain.entity.Rota;
+import com.VanControl.VanControl.veiculo.domain.entity.Veiculo;
+import com.VanControl.VanControl.user.domain.entity.User;
+import com.VanControl.VanControl.motorista.repository.MotoristaRepository;
 import com.VanControl.VanControl.passageiro.domain.entity.Passageiro;
 import com.VanControl.VanControl.passageiro.repository.PassageiroRepository;
-import com.VanControl.VanControl.rota.service.RotaService;
-import com.VanControl.VanControl.veiculo.service.VeiculoService;
+import com.VanControl.VanControl.rota.repository.RotaRepository;
+import com.VanControl.VanControl.veiculo.repository.VeiculoRepository;
 import com.VanControl.VanControl.viagem.domain.dto.request.CriarViagemRequestDto;
 import com.VanControl.VanControl.viagem.domain.entity.Viagem;
 import com.VanControl.VanControl.viagem.mapper.ViagemMapper;
@@ -29,6 +32,7 @@ import org.springframework.data.domain.Sort;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.YearMonth;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -39,29 +43,14 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class ViagemCadastroEOrdenacaoTest {
 
-    @Mock
-    private ViagemRepository viagemRepository;
-
-    @Mock
-    private ViagemPassageiroRepository viagemPassageiroRepository;
-
-    @Mock
-    private PassageiroRepository passageiroRepository;
-
-    @Mock
-    private EmparelhamentoService emparelhamentoService;
-
-    @Mock
-    private RotaService rotaService;
-
-    @Mock
-    private VeiculoService veiculoService;
-
-    @Mock
-    private MotoristaService motoristaService;
-
-    @Mock
-    private SecurityUtils securityUtils;
+    @Mock private ViagemRepository viagemRepository;
+    @Mock private ViagemPassageiroRepository viagemPassageiroRepository;
+    @Mock private PassageiroRepository passageiroRepository;
+    @Mock private EmparelhamentoService emparelhamentoService;
+    @Mock private RotaRepository rotaRepository;
+    @Mock private VeiculoRepository veiculoRepository;
+    @Mock private MotoristaRepository motoristaRepository;
+    @Mock private SecurityUtils securityUtils;
 
     @InjectMocks
     private ViagemService viagemService;
@@ -69,51 +58,67 @@ class ViagemCadastroEOrdenacaoTest {
     private static final String CPF = "52998224725";
 
     @Test
-    void cadastroPersisteCpfDoMotoristaEMapperDevolveCpf() {
-        var motorista = new MotoristaResponseDto(
-                "Maria Santos",
-                CPF,
-                "maria@example.com",
-                "98765432101",
-                "D",
-                YearMonth.of(2099, 12),
-                "(15) 98888-1234"
-        );
+    void cadastroPersisteVinculosECopiasHistoricas() {
+        var rota = new Rota();
+        rota.setCodigoRota("ROT-TESTE");
 
-        when(motoristaService.buscarMotoristaPorCpf(CPF))
-                .thenReturn(motorista);
+        var veiculo = new Veiculo();
+        veiculo.setPlaca("ABC-1D23");
+
+        var user = new User();
+        user.setCpf(CPF);
+        user.setName("Maria Santos");
+
+        var motorista = new Motorista();
+        motorista.setUser(user);
+
+        when(rotaRepository.findByCodigoRota("ROT-TESTE"))
+                .thenReturn(Optional.of(rota));
+
+        when(veiculoRepository.findByPlaca("ABC-1D23"))
+                .thenReturn(veiculo);
+
+        when(motoristaRepository.findAllByCpfNormalizado(CPF))
+                .thenReturn(List.of(motorista));
 
         var resposta = viagemService.cadastrarViagem(request());
 
         var captor = ArgumentCaptor.forClass(Viagem.class);
-        verify(viagemRepository).save(captor.capture());
+        verify(viagemRepository).saveAndFlush(captor.capture());
 
-        Viagem salva = captor.getValue();
+        var salva = captor.getValue();
 
+        assertSame(rota, salva.getRota());
+        assertSame(veiculo, salva.getVeiculo());
+        assertSame(motorista, salva.getMotorista());
         assertEquals(CPF, salva.getDocumentoMotorista());
-        assertNotEquals(motorista.nome(), salva.getDocumentoMotorista());
+
         assertEquals(
                 CPF,
                 ViagemMapper.converterParaViagemDto(salva).cpfMotorista()
         );
+
         assertEquals("Viagem cadastrada.", resposta.mensagem());
         assertTrue(salva.getCodigoViagem().matches("VIA-[0-9A-F]{8}"));
-
-        verify(rotaService).buscarRotaPorCodigo("ROT-TESTE");
-        verify(veiculoService).buscarVeiculoPorPlaca("ABC-1D23");
     }
 
     @Test
     void motoristaInexistenteNaoPermiteGravarViagem() {
-        when(motoristaService.buscarMotoristaPorCpf(CPF))
-                .thenThrow(new NotFoundException("Motorista não encontrado"));
+        when(rotaRepository.findByCodigoRota("ROT-TESTE"))
+                .thenReturn(Optional.of(new Rota()));
+
+        when(veiculoRepository.findByPlaca("ABC-1D23"))
+                .thenReturn(new Veiculo());
+
+        when(motoristaRepository.findAllByCpfNormalizado(CPF))
+                .thenReturn(List.of());
 
         assertThrows(
                 NotFoundException.class,
                 () -> viagemService.cadastrarViagem(request())
         );
 
-        verify(viagemRepository, never()).save(any());
+        verify(viagemRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -153,6 +158,7 @@ class ViagemCadastroEOrdenacaoTest {
 
         assertEquals(2, consulta.getPageNumber());
         assertEquals(5, consulta.getPageSize());
+
         assertEquals(
                 Sort.by(
                         Sort.Order.desc("viagem.dataViagem"),
@@ -178,7 +184,10 @@ class ViagemCadastroEOrdenacaoTest {
 
         var erro = assertThrows(
                 BadRequestException.class,
-                () -> viagemService.listarViagensPorPassageiroCpf(CPF, pageable)
+                () -> viagemService.listarViagensPorPassageiroCpf(
+                        CPF,
+                        pageable
+                )
         );
 
         assertEquals(
@@ -230,6 +239,7 @@ class ViagemCadastroEOrdenacaoTest {
         );
 
         assertTrue(captor.getValue().isUnpaged());
+
         assertEquals(
                 Sort.by(
                         Sort.Order.desc("viagem.dataViagem"),

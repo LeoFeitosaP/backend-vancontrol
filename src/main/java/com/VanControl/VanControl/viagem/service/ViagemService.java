@@ -6,14 +6,14 @@ import com.VanControl.VanControl.common.exception.model.NotFoundException;
 import com.VanControl.VanControl.common.util.SecurityUtils;
 import com.VanControl.VanControl.grafo.domain.entity.ArestaPassageiroVeiculo;
 import com.VanControl.VanControl.grafo.service.EmparelhamentoService;
-import com.VanControl.VanControl.motorista.service.MotoristaService;
+import com.VanControl.VanControl.motorista.repository.MotoristaRepository;
 import com.VanControl.VanControl.passageiro.domain.dto.response.PassageiroResumoResponseDto;
 import com.VanControl.VanControl.passageiro.domain.entity.Passageiro;
 import com.VanControl.VanControl.passageiro.repository.PassageiroRepository;
-import com.VanControl.VanControl.rota.service.RotaService;
+import com.VanControl.VanControl.rota.repository.RotaRepository;
 import com.VanControl.VanControl.user.domain.enums.Role;
 import com.VanControl.VanControl.user.domain.entity.User;
-import com.VanControl.VanControl.veiculo.service.VeiculoService;
+import com.VanControl.VanControl.veiculo.repository.VeiculoRepository;
 import com.VanControl.VanControl.viagem.domain.dto.request.CriarViagemRequestDto;
 import com.VanControl.VanControl.viagem.domain.dto.response.ViagemDefaultResponseDto;
 import com.VanControl.VanControl.viagemPassageiro.domain.dto.ViagemPassageirosResponseDto;
@@ -47,24 +47,63 @@ public class ViagemService {
     private final ViagemPassageiroRepository viagemPassageiroRepository;
     private final PassageiroRepository passageiroRepository;
     private final EmparelhamentoService emparelhamentoService;
-    private final RotaService rotaService;
-    private final VeiculoService veiculoService;
-    private final MotoristaService motoristaService;
+    private final RotaRepository rotaRepository;
+    private final VeiculoRepository veiculoRepository;
+    private final MotoristaRepository motoristaRepository;
     private final SecurityUtils securityUtils;
 
+    @Transactional
     public ViagemDefaultResponseDto cadastrarViagem(CriarViagemRequestDto dto) {
-        rotaService.buscarRotaPorCodigo(dto.codigoRota());
-        veiculoService.buscarVeiculoPorPlaca(dto.placaVeiculo());
-        var motorista = motoristaService.buscarMotoristaPorCpf(dto.cpfMotorista());
+        var rota = rotaRepository.findByCodigoRota(dto.codigoRota())
+                .orElseThrow(() -> new NotFoundException("Rota inexistente"));
 
-        var viagem = ViagemMapper.converterParaViagem(dto);
-        viagem.setDocumentoMotorista(motorista.cpf());
+        var veiculo = veiculoRepository.findByPlaca(dto.placaVeiculo());
 
-        viagem.setCodigoViagem(
-                "VIA-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase()
+        if (veiculo == null) {
+            throw new NotFoundException("Veículo não encontrado");
+        }
+
+        String cpf = dto.cpfMotorista() == null
+                ? ""
+                : dto.cpfMotorista().trim();
+
+        if (!cpf.matches(
+                "[0-9]{11}|[0-9]{3}\\.[0-9]{3}\\.[0-9]{3}-[0-9]{2}"
+        )) {
+            throw new BadRequestException(
+                    "Informe o CPF do motorista com 11 dígitos"
+            );
+        }
+
+        cpf = cpf.replace(".", "").replace("-", "");
+
+        var motoristas = motoristaRepository.findAllByCpfNormalizado(cpf);
+
+        if (motoristas.isEmpty()) {
+            throw new NotFoundException("Motorista não encontrado");
+        }
+
+        if (motoristas.size() != 1) {
+            throw new ConflictException(
+                    "CPF associado a mais de um motorista; revise o cadastro"
+            );
+        }
+
+        var viagem = ViagemMapper.converterParaViagem(
+                dto,
+                rota,
+                veiculo,
+                motoristas.getFirst()
         );
 
-        viagemRepository.save(viagem);
+        viagem.setCodigoViagem(
+                "VIA-" + UUID.randomUUID()
+                        .toString()
+                        .substring(0, 8)
+                        .toUpperCase()
+        );
+
+        viagemRepository.saveAndFlush(viagem);
         return new ViagemDefaultResponseDto("Viagem cadastrada.");
     }
 
@@ -82,17 +121,21 @@ public class ViagemService {
                     .map(ViagemMapper::converterParaViagemDto);
         }
 
-        var passageiro = passageiroRepository.findByUser_Cpf(usuarioLogado.getCpf())
-                .orElseThrow(() -> new NotFoundException("Passageiro não encontrado"));
+        var passageiro = passageiroRepository.findByUser_Cpf(
+                usuarioLogado.getCpf()
+        ).orElseThrow(
+                () -> new NotFoundException("Passageiro não encontrado")
+        );
 
         var viagensNaoConcluidas = viagemRepository.findAll().stream()
                 .filter(v -> !v.isViagemConcluida())
                 .toList();
 
-        var recomendadas = emparelhamentoService.recomendarViagensParaPassageiro(
-                passageiro,
-                viagensNaoConcluidas
-        );
+        var recomendadas =
+                emparelhamentoService.recomendarViagensParaPassageiro(
+                        passageiro,
+                        viagensNaoConcluidas
+                );
 
         var dtosOrdenados = recomendadas.stream()
                 .map(ArestaPassageiroVeiculo::viagem)
@@ -102,10 +145,12 @@ public class ViagemService {
         return paginarManualmente(dtosOrdenados, pageable);
     }
 
+    @Transactional
     public ViagemDefaultResponseDto atualizarStatusViagem(String codigo) {
         var viagem = buscarViagemPorCodigoInterno(codigo);
         viagem.setViagemConcluida(true);
         viagemRepository.save(viagem);
+
         return new ViagemDefaultResponseDto(
                 "Status da viagem atualizado para concluída."
         );
@@ -118,7 +163,10 @@ public class ViagemService {
         return new ViagemDefaultResponseDto("Viagem deletada.");
     }
 
-    public ViagemDefaultResponseDto adicionarPassageiro(String codigo, String cpf) {
+    public ViagemDefaultResponseDto adicionarPassageiro(
+            String codigo,
+            String cpf
+    ) {
         var viagem = buscarViagemPorCodigoInterno(codigo);
         var passageiro = buscarPassageiroPorCpfInterno(cpf);
 
@@ -147,11 +195,17 @@ public class ViagemService {
                 .build();
 
         viagemPassageiroRepository.save(associacao);
-        return new ViagemDefaultResponseDto("Passageiro associado à viagem.");
+
+        return new ViagemDefaultResponseDto(
+                "Passageiro associado à viagem."
+        );
     }
 
     @Transactional
-    public ViagemDefaultResponseDto removerPassageiro(String codigo, String cpf) {
+    public ViagemDefaultResponseDto removerPassageiro(
+            String codigo,
+            String cpf
+    ) {
         var viagem = buscarViagemPorCodigoInterno(codigo);
         var passageiro = buscarPassageiroPorCpfInterno(cpf);
 
@@ -167,24 +221,30 @@ public class ViagemService {
                 passageiro.getId()
         );
 
-        return new ViagemDefaultResponseDto("Passageiro removido da viagem.");
+        return new ViagemDefaultResponseDto(
+                "Passageiro removido da viagem."
+        );
     }
 
-    public ViagemPassageirosResponseDto listarPassageirosPorViagem(String codigo) {
+    public ViagemPassageirosResponseDto listarPassageirosPorViagem(
+            String codigo
+    ) {
         var viagem = buscarViagemPorCodigoInterno(codigo);
-        var veiculo = veiculoService.buscarVeiculoPorPlaca(viagem.getPlacaVeiculo());
+        var veiculo = viagem.getVeiculo();
 
-        var passageiros = viagemPassageiroRepository.findByViagem_Id(viagem.getId())
-                .stream()
-                .map(ViagemPassageiro::getPassageiro)
-                .map(this::converterParaResumo)
-                .toList();
+        var passageiros =
+                viagemPassageiroRepository.findByViagem_Id(viagem.getId())
+                        .stream()
+                        .map(ViagemPassageiro::getPassageiro)
+                        .map(this::converterParaResumo)
+                        .toList();
 
-        var ocupacao = viagemPassageiroRepository.countByViagem_Id(viagem.getId());
+        var ocupacao =
+                viagemPassageiroRepository.countByViagem_Id(viagem.getId());
 
         return new ViagemPassageirosResponseDto(
                 viagem.getCodigoViagem(),
-                veiculo.capacidade(),
+                veiculo.getCapacidade(),
                 ocupacao,
                 passageiros
         );
@@ -222,7 +282,9 @@ public class ViagemService {
 
         List<Sort.Order> ordens = ordenacao.stream()
                 .map(ordem -> ordem.withProperty(
-                        propriedadeOrdenacaoViagensPassageiro(ordem.getProperty())
+                        propriedadeOrdenacaoViagensPassageiro(
+                                ordem.getProperty()
+                        )
                 ))
                 .toList();
 
@@ -243,23 +305,33 @@ public class ViagemService {
         );
     }
 
-    private String propriedadeOrdenacaoViagensPassageiro(String propriedade) {
+    private String propriedadeOrdenacaoViagensPassageiro(
+            String propriedade
+    ) {
         return switch (propriedade) {
             case "codigoViagem", "viagem.codigoViagem" ->
                     "viagem.codigoViagem";
+
             case "codigoRota", "viagem.codigoRota" ->
                     "viagem.codigoRota";
+
             case "placaVeiculo", "viagem.placaVeiculo" ->
                     "viagem.placaVeiculo";
+
             case "dataViagem", "viagem.dataViagem" ->
                     "viagem.dataViagem";
+
             case "horarioSaidaPrevisto", "viagem.horarioSaidaPrevisto" ->
                     "viagem.horarioSaidaPrevisto";
+
             case "horarioChegadaPrevisto", "viagem.horarioChegadaPrevisto" ->
                     "viagem.horarioChegadaPrevisto";
+
             case "viagemConcluida", "viagem.viagemConcluida" ->
                     "viagem.viagemConcluida";
+
             case "dataAssociacao", "id" -> propriedade;
+
             default -> throw new BadRequestException(
                     "Campo de ordenação inválido para viagens do passageiro: "
                             + propriedade
@@ -267,7 +339,9 @@ public class ViagemService {
         };
     }
 
-    private PassageiroResumoResponseDto converterParaResumo(Passageiro passageiro) {
+    private PassageiroResumoResponseDto converterParaResumo(
+            Passageiro passageiro
+    ) {
         return new PassageiroResumoResponseDto(
                 passageiro.getUser().getName(),
                 passageiro.getUser().getCpf(),
@@ -299,7 +373,9 @@ public class ViagemService {
 
     private Passageiro buscarPassageiroPorCpfInterno(String cpf) {
         return passageiroRepository.findByUser_Cpf(cpf)
-                .orElseThrow(() -> new NotFoundException("Passageiro não encontrado"));
+                .orElseThrow(
+                        () -> new NotFoundException("Passageiro não encontrado")
+                );
     }
 
     private void validarAcessoViagem(Viagem viagem) {
@@ -310,10 +386,12 @@ public class ViagemService {
         }
 
         var passageiro = passageiroRepository.findByUser_Cpf(user.getCpf())
-                .orElseThrow(() -> new AccessDeniedException("Acesso negado"));
+                .orElseThrow(
+                        () -> new AccessDeniedException("Acesso negado")
+                );
 
-        boolean associado = viagemPassageiroRepository
-                .existsByViagem_IdAndPassageiro_Id(
+        boolean associado =
+                viagemPassageiroRepository.existsByViagem_IdAndPassageiro_Id(
                         viagem.getId(),
                         passageiro.getId()
                 );
@@ -324,11 +402,15 @@ public class ViagemService {
     }
 
     private void validarLimiteCapacidade(Viagem viagem) {
-        var veiculo = veiculoService.buscarVeiculoPorPlaca(viagem.getPlacaVeiculo());
-        var ocupacao = viagemPassageiroRepository.countByViagem_Id(viagem.getId());
+        var veiculo = viagem.getVeiculo();
 
-        if (ocupacao >= veiculo.capacidade()) {
-            throw new BadRequestException("Capacidade máxima do veículo atingida");
+        var ocupacao =
+                viagemPassageiroRepository.countByViagem_Id(viagem.getId());
+
+        if (ocupacao >= veiculo.getCapacidade()) {
+            throw new BadRequestException(
+                    "Capacidade máxima do veículo atingida"
+            );
         }
     }
 
@@ -347,12 +429,15 @@ public class ViagemService {
             List<ViagemResponseDto> lista,
             Pageable pageable
     ) {
-        int inicio = (int) pageable.getOffset();
+        if (pageable.isUnpaged()) {
+            return new PageImpl<>(lista);
+        }
 
-        if (inicio >= lista.size()) {
+        if (pageable.getOffset() >= lista.size()) {
             return new PageImpl<>(List.of(), pageable, lista.size());
         }
 
+        int inicio = (int) pageable.getOffset();
         int fim = Math.min(inicio + pageable.getPageSize(), lista.size());
 
         return new PageImpl<>(

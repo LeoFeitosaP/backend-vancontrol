@@ -11,6 +11,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
+import java.sql.SQLException;
 import java.util.stream.Collectors;
 
 @ControllerAdvice
@@ -75,6 +76,23 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorDetails> handleDataIntegrityViolationException(
             DataIntegrityViolationException ex
     ) {
+        for (
+                Throwable causa = ex;
+                causa != null;
+                causa = causa.getCause()
+        ) {
+            if (causa instanceof SQLException sql
+                    && ("23503".equals(sql.getSQLState())
+                    || "23001".equals(sql.getSQLState()))) {
+                return new ResponseEntity<>(
+                        new ErrorDetails(
+                                "Operação viola um vínculo existente entre registros"
+                        ),
+                        HttpStatus.CONFLICT
+                );
+            }
+        }
+
         return new ResponseEntity<>(
                 new ErrorDetails("Dados já cadastrados"),
                 HttpStatus.CONFLICT

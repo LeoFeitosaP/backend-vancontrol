@@ -1,16 +1,24 @@
 package com.VanControl.VanControl.viagem.mapper;
 
+import com.VanControl.VanControl.motorista.domain.entity.Motorista;
+import com.VanControl.VanControl.rota.domain.entity.Rota;
+import com.VanControl.VanControl.veiculo.domain.entity.Veiculo;
 import com.VanControl.VanControl.viagem.domain.dto.request.CriarViagemRequestDto;
 import com.VanControl.VanControl.viagem.domain.dto.response.ViagemResponseDto;
 import com.VanControl.VanControl.viagem.domain.entity.Viagem;
 
 public class ViagemMapper {
 
-    public static Viagem converterParaViagem(CriarViagemRequestDto dto) {
+    public static Viagem converterParaViagem(
+            CriarViagemRequestDto dto,
+            Rota rota,
+            Veiculo veiculo,
+            Motorista motorista
+    ) {
         return new Viagem(
-                dto.codigoRota(),
-                dto.placaVeiculo(),
-                dto.cpfMotorista(),
+                rota,
+                veiculo,
+                motorista,
                 dto.dataViagem(),
                 dto.horarioSaidaPrevisto(),
                 dto.horarioChegadaPrevisto()
