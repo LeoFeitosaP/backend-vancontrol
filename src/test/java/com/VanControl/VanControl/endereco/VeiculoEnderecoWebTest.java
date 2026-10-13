@@ -7,6 +7,7 @@ import com.VanControl.VanControl.common.security.CustomUserDetailsService;
 import com.VanControl.VanControl.common.security.SecurityConfig;
 import com.VanControl.VanControl.common.security.SecurityFilter;
 import com.VanControl.VanControl.common.security.TokenService;
+import com.VanControl.VanControl.endereco.controller.EnderecoController;
 import com.VanControl.VanControl.endereco.domain.dto.CepResponseDto;
 import com.VanControl.VanControl.endereco.exceptions.EnderecoException;
 import com.VanControl.VanControl.endereco.exceptions.EnderecoExceptionHandler;
@@ -35,7 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(controllers = {
         VeiculoController.class,
-        com.VanControl.VanControl.endereco.EnderecoController.class
+        EnderecoController.class
 })
 @Import({
         SecurityConfig.class,

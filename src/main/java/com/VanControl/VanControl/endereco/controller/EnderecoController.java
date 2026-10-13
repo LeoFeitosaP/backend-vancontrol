@@ -1,4 +1,4 @@
-package com.VanControl.VanControl.endereco;
+package com.VanControl.VanControl.endereco.controller;
 
 import com.VanControl.VanControl.endereco.domain.dto.CepResponseDto;
 import com.VanControl.VanControl.endereco.service.ViaCepClient;
