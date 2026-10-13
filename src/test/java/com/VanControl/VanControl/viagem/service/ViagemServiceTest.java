@@ -7,10 +7,11 @@ import com.VanControl.VanControl.passageiro.domain.entity.Passageiro;
 import com.VanControl.VanControl.passageiro.repository.PassageiroRepository;
 import com.VanControl.VanControl.user.domain.entity.User;
 import com.VanControl.VanControl.veiculo.domain.entity.Veiculo;
+import com.VanControl.VanControl.veiculo.repository.VeiculoRepository;
 import com.VanControl.VanControl.viagem.domain.entity.Viagem;
+import com.VanControl.VanControl.viagem.repository.ViagemRepository;
 import com.VanControl.VanControl.viagemPassageiro.domain.entity.ViagemPassageiro;
 import com.VanControl.VanControl.viagemPassageiro.repository.ViagemPassageiroRepository;
-import com.VanControl.VanControl.viagem.repository.ViagemRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,6 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,6 +42,9 @@ class ViagemServiceTest {
     @Mock
     private PassageiroRepository passageiroRepository;
 
+    @Mock
+    private VeiculoRepository veiculoRepository;
+
     @InjectMocks
     private ViagemService viagemService;
 
@@ -53,11 +58,13 @@ class ViagemServiceTest {
         viagem.setId(UUID.randomUUID());
         viagem.setCodigoViagem("VIA-1234");
         viagem.setPlacaVeiculo("ABC-1234");
-        viagem.setDataViagem(LocalDate.now().plusDays(5));
+        viagem.setDataViagem(LocalDate.now(RegrasReserva.FUSO).plusDays(5));
         viagem.setViagemConcluida(false);
+        viagem.setHorarioSaidaPrevisto(LocalTime.of(18, 0));
+        viagem.setHorarioChegadaPrevisto(LocalTime.of(19, 0));
 
         User user = new User();
-        user.setCpf("4206686904");
+        user.setCpf("52998224725");
         user.setName("João");
 
         passageiro = new Passageiro();
@@ -74,13 +81,17 @@ class ViagemServiceTest {
                 "DISPONIVEL"
         );
 
+        veiculo.setIdVeiculo(UUID.randomUUID());
         viagem.setVeiculo(veiculo);
     }
 
     @Test
     @DisplayName("Deve adicionar passageiro com sucesso")
     void deveAdicionarPassageiroComSucesso() {
-        when(viagemRepository.findByCodigoViagem(viagem.getCodigoViagem()))
+        when(veiculoRepository.buscarParaAtualizacao(veiculo.getIdVeiculo()))
+                .thenReturn(veiculo);
+
+        when(viagemRepository.buscarParaAtualizacao(viagem.getCodigoViagem()))
                 .thenReturn(viagem);
 
         when(passageiroRepository.findByUser_Cpf(passageiro.getUser().getCpf()))
@@ -100,14 +111,35 @@ class ViagemServiceTest {
 
         assertEquals("Passageiro associado à viagem.", resposta.mensagem());
 
-        verify(viagemPassageiroRepository)
-                .save(any(ViagemPassageiro.class));
+        var ordem = inOrder(
+                viagemRepository,
+                veiculoRepository,
+                viagemPassageiroRepository
+        );
+
+        ordem.verify(viagemRepository)
+                .buscarParaAtualizacao(viagem.getCodigoViagem());
+
+        ordem.verify(veiculoRepository)
+                .buscarParaAtualizacao(veiculo.getIdVeiculo());
+
+        ordem.verify(viagemPassageiroRepository)
+                .existsByViagem_IdAndPassageiro_Id(
+                        viagem.getId(),
+                        passageiro.getId()
+                );
+
+        ordem.verify(viagemPassageiroRepository)
+                .countByViagem_Id(viagem.getId());
+
+        ordem.verify(viagemPassageiroRepository)
+                .saveAndFlush(any(ViagemPassageiro.class));
     }
 
     @Test
     @DisplayName("Lança NotFoundException ao tentar adicionar em viagem inexistente")
     void deveLancarExceptionViagemInexistente() {
-        when(viagemRepository.findByCodigoViagem("VIA-INEX"))
+        when(viagemRepository.buscarParaAtualizacao("VIA-INEX"))
                 .thenReturn(null);
 
         assertThrows(
@@ -122,9 +154,12 @@ class ViagemServiceTest {
     @Test
     @DisplayName("Lança BadRequestException se viagem concluída")
     void deveLancarExceptionSeViagemConcluida() {
+        when(veiculoRepository.buscarParaAtualizacao(veiculo.getIdVeiculo()))
+                .thenReturn(veiculo);
+
         viagem.setViagemConcluida(true);
 
-        when(viagemRepository.findByCodigoViagem(viagem.getCodigoViagem()))
+        when(viagemRepository.buscarParaAtualizacao(viagem.getCodigoViagem()))
                 .thenReturn(viagem);
 
         when(passageiroRepository.findByUser_Cpf(passageiro.getUser().getCpf()))
@@ -142,7 +177,10 @@ class ViagemServiceTest {
     @Test
     @DisplayName("Lança ConflictException se passageiro já associado")
     void deveLancarExceptionSePassageiroJaAssociado() {
-        when(viagemRepository.findByCodigoViagem(viagem.getCodigoViagem()))
+        when(veiculoRepository.buscarParaAtualizacao(veiculo.getIdVeiculo()))
+                .thenReturn(veiculo);
+
+        when(viagemRepository.buscarParaAtualizacao(viagem.getCodigoViagem()))
                 .thenReturn(viagem);
 
         when(passageiroRepository.findByUser_Cpf(passageiro.getUser().getCpf()))
@@ -164,9 +202,12 @@ class ViagemServiceTest {
     @Test
     @DisplayName("Lança BadRequestException se estourar capacidade")
     void deveLancarExceptionSeCapacidadeMax() {
-        viagem.setDataViagem(LocalDate.now().plusDays(2));
+        when(veiculoRepository.buscarParaAtualizacao(veiculo.getIdVeiculo()))
+                .thenReturn(veiculo);
 
-        when(viagemRepository.findByCodigoViagem(viagem.getCodigoViagem()))
+        viagem.setDataViagem(LocalDate.now(RegrasReserva.FUSO).plusDays(2));
+
+        when(viagemRepository.buscarParaAtualizacao(viagem.getCodigoViagem()))
                 .thenReturn(viagem);
 
         when(passageiroRepository.findByUser_Cpf(passageiro.getUser().getCpf()))
@@ -191,7 +232,7 @@ class ViagemServiceTest {
     @Test
     @DisplayName("Deve remover passageiro com sucesso")
     void deveRemoverPassageiroComSucesso() {
-        when(viagemRepository.findByCodigoViagem(viagem.getCodigoViagem()))
+        when(viagemRepository.buscarParaAtualizacao(viagem.getCodigoViagem()))
                 .thenReturn(viagem);
 
         when(passageiroRepository.findByUser_Cpf(passageiro.getUser().getCpf()))
@@ -218,7 +259,7 @@ class ViagemServiceTest {
     @Test
     @DisplayName("Lança NotFoundException se associação não existe ao remover")
     void deveLancarExcecaoAoRemoverSeNaoAssociado() {
-        when(viagemRepository.findByCodigoViagem(viagem.getCodigoViagem()))
+        when(viagemRepository.buscarParaAtualizacao(viagem.getCodigoViagem()))
                 .thenReturn(viagem);
 
         when(passageiroRepository.findByUser_Cpf(passageiro.getUser().getCpf()))

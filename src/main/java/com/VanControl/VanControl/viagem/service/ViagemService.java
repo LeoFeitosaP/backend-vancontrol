@@ -11,27 +11,28 @@ import com.VanControl.VanControl.passageiro.domain.dto.response.PassageiroResumo
 import com.VanControl.VanControl.passageiro.domain.entity.Passageiro;
 import com.VanControl.VanControl.passageiro.repository.PassageiroRepository;
 import com.VanControl.VanControl.rota.repository.RotaRepository;
-import com.VanControl.VanControl.user.domain.enums.Role;
 import com.VanControl.VanControl.user.domain.entity.User;
+import com.VanControl.VanControl.user.domain.enums.Role;
 import com.VanControl.VanControl.veiculo.repository.VeiculoRepository;
 import com.VanControl.VanControl.viagem.domain.dto.request.CriarViagemRequestDto;
 import com.VanControl.VanControl.viagem.domain.dto.response.ViagemDefaultResponseDto;
-import com.VanControl.VanControl.viagemPassageiro.domain.dto.ViagemPassageirosResponseDto;
 import com.VanControl.VanControl.viagem.domain.dto.response.ViagemResponseDto;
 import com.VanControl.VanControl.viagem.domain.dto.response.ViagemResumoResponseDto;
 import com.VanControl.VanControl.viagem.domain.entity.Viagem;
-import com.VanControl.VanControl.viagemPassageiro.domain.entity.ViagemPassageiro;
 import com.VanControl.VanControl.viagem.mapper.ViagemMapper;
-import com.VanControl.VanControl.viagemPassageiro.repository.ViagemPassageiroRepository;
 import com.VanControl.VanControl.viagem.repository.ViagemRepository;
+import com.VanControl.VanControl.viagemPassageiro.domain.dto.ViagemPassageirosResponseDto;
+import com.VanControl.VanControl.viagemPassageiro.domain.entity.ViagemPassageiro;
+import com.VanControl.VanControl.viagemPassageiro.repository.ViagemPassageiroRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -107,12 +108,14 @@ public class ViagemService {
         return new ViagemDefaultResponseDto("Viagem cadastrada.");
     }
 
+    @Transactional(readOnly = true)
     public ViagemResponseDto buscarViagemPorCodigo(String codigo) {
         var viagem = buscarViagemPorCodigoInterno(codigo);
         validarAcessoViagem(viagem);
         return ViagemMapper.converterParaViagemDto(viagem);
     }
 
+    @Transactional(readOnly = true)
     public Page<ViagemResponseDto> listarTodasViagens(Pageable pageable) {
         User usuarioLogado = securityUtils.getAuthenticatedUser();
 
@@ -145,9 +148,9 @@ public class ViagemService {
         return paginarManualmente(dtosOrdenados, pageable);
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ViagemDefaultResponseDto atualizarStatusViagem(String codigo) {
-        var viagem = buscarViagemPorCodigoInterno(codigo);
+        var viagem = buscarViagemParaAtualizacao(codigo);
         viagem.setViagemConcluida(true);
         viagemRepository.save(viagem);
 
@@ -156,25 +159,31 @@ public class ViagemService {
         );
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ViagemDefaultResponseDto deletarViagem(String codigo) {
-        var viagem = buscarViagemPorCodigoInterno(codigo);
+        var viagem = buscarViagemParaAtualizacao(codigo);
         viagemRepository.delete(viagem);
         return new ViagemDefaultResponseDto("Viagem deletada.");
     }
 
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ViagemDefaultResponseDto adicionarPassageiro(
             String codigo,
             String cpf
     ) {
-        var viagem = buscarViagemPorCodigoInterno(codigo);
-        var passageiro = buscarPassageiroPorCpfInterno(cpf);
+        var viagem = buscarViagemParaAtualizacao(codigo);
 
-        if (viagem.isViagemConcluida()) {
-            throw new BadRequestException(
-                    "Viagem concluída não permite novas associações"
-            );
+        var veiculo = veiculoRepository.buscarParaAtualizacao(
+                viagem.getVeiculo().getIdVeiculo()
+        );
+
+        if (veiculo == null) {
+            throw new NotFoundException("Veículo não encontrado");
         }
+
+        viagem.setVeiculo(veiculo);
+
+        var passageiro = buscarPassageiroPorCpfInterno(cpf);
 
         if (viagemPassageiroRepository.existsByViagem_IdAndPassageiro_Id(
                 viagem.getId(),
@@ -185,28 +194,35 @@ public class ViagemService {
             );
         }
 
-        validarLimiteCapacidade(viagem);
-        validarPrazoAssociacao(viagem);
+        long ocupacao = viagemPassageiroRepository.countByViagem_Id(
+                viagem.getId()
+        );
+
+        RegrasReserva.validar(
+                viagem,
+                ocupacao,
+                LocalDate.now(RegrasReserva.FUSO)
+        );
 
         var associacao = ViagemPassageiro.builder()
                 .viagem(viagem)
                 .passageiro(passageiro)
-                .dataAssociacao(LocalDateTime.now())
+                .dataAssociacao(LocalDateTime.now(RegrasReserva.FUSO))
                 .build();
 
-        viagemPassageiroRepository.save(associacao);
+        viagemPassageiroRepository.saveAndFlush(associacao);
 
         return new ViagemDefaultResponseDto(
                 "Passageiro associado à viagem."
         );
     }
 
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ViagemDefaultResponseDto removerPassageiro(
             String codigo,
             String cpf
     ) {
-        var viagem = buscarViagemPorCodigoInterno(codigo);
+        var viagem = buscarViagemParaAtualizacao(codigo);
         var passageiro = buscarPassageiroPorCpfInterno(cpf);
 
         if (!viagemPassageiroRepository.existsByViagem_IdAndPassageiro_Id(
@@ -226,6 +242,7 @@ public class ViagemService {
         );
     }
 
+    @Transactional(readOnly = true)
     public ViagemPassageirosResponseDto listarPassageirosPorViagem(
             String codigo
     ) {
@@ -371,6 +388,16 @@ public class ViagemService {
         return viagem;
     }
 
+    private Viagem buscarViagemParaAtualizacao(String codigo) {
+        var viagem = viagemRepository.buscarParaAtualizacao(codigo);
+
+        if (viagem == null) {
+            throw new NotFoundException("Viagem não encontrada");
+        }
+
+        return viagem;
+    }
+
     private Passageiro buscarPassageiroPorCpfInterno(String cpf) {
         return passageiroRepository.findByUser_Cpf(cpf)
                 .orElseThrow(
@@ -398,30 +425,6 @@ public class ViagemService {
 
         if (!associado) {
             throw new AccessDeniedException("Acesso negado");
-        }
-    }
-
-    private void validarLimiteCapacidade(Viagem viagem) {
-        var veiculo = viagem.getVeiculo();
-
-        var ocupacao =
-                viagemPassageiroRepository.countByViagem_Id(viagem.getId());
-
-        if (ocupacao >= veiculo.getCapacidade()) {
-            throw new BadRequestException(
-                    "Capacidade máxima do veículo atingida"
-            );
-        }
-    }
-
-    private void validarPrazoAssociacao(Viagem viagem) {
-        LocalDate dataViagem = viagem.getDataViagem();
-        LocalDate limite = dataViagem.minusDays(1);
-
-        if (LocalDate.now().isAfter(limite)) {
-            throw new BadRequestException(
-                    "Associar passageiro permitido apenas até um dia antes da viagem"
-            );
         }
     }
 

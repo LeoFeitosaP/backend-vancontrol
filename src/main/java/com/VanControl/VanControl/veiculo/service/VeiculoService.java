@@ -68,12 +68,14 @@ public class VeiculoService {
             String placa,
             EnderecoRequestDto dto
     ) {
-        buscarVeiculoPorPlacaInterno(placa);
+        if (!veiculoRepository.existsByPlaca(placa)) {
+            throw new NotFoundException("Veículo não encontrado");
+        }
 
         var endereco = enderecoService.resolver(dto);
 
         return transacao.execute(status -> {
-            var veiculo = buscarVeiculoPorPlacaInterno(placa);
+            var veiculo = buscarVeiculoParaAtualizacao(placa);
 
             if (!Objects.equals(veiculo.getEnderecoBase(), endereco)) {
                 veiculo.definirEndereco(endereco);
@@ -104,7 +106,7 @@ public class VeiculoService {
     public VeiculoDefaultResponseDto atualizarStatusVeiculo(
             AtualizarStatusVeiculoRequestDto dto
     ) {
-        var veiculo = buscarVeiculoPorPlacaInterno(dto.placa());
+        var veiculo = buscarVeiculoParaAtualizacao(dto.placa());
 
         try {
             veiculo.setStatus(
@@ -131,6 +133,16 @@ public class VeiculoService {
         return new VeiculoDefaultResponseDto(
                 "Veículo deletado com sucesso"
         );
+    }
+
+    private Veiculo buscarVeiculoParaAtualizacao(String placa) {
+        var veiculo = veiculoRepository.buscarPorPlacaParaAtualizacao(placa);
+
+        if (veiculo == null) {
+            throw new NotFoundException("Veículo não encontrado");
+        }
+
+        return veiculo;
     }
 
     private Veiculo buscarVeiculoPorPlacaInterno(String placa) {
