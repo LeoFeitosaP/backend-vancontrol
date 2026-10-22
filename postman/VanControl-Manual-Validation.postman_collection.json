@@ -1,0 +1,140 @@
+{
+  "info": {
+    "name": "VanControl API - Validacao manual completa",
+    "description": "Colecao executavel para validar manualmente todos os endpoints da API. Use o login do perfil adequado antes das requisicoes protegidas. Cadastros com chaves novas podem ser executados uma vez por banco.",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{"key": "token", "value": "{{token}}", "type": "string"}]
+  },
+  "item": [
+    {
+      "name": "01 - Autenticacao e dados base",
+      "description": "Comece pelo Login ADMIN. Depois cadastre passageiro e motorista, ou use registros existentes. O token da ultima requisicao de login fica em {{token}}.",
+      "item": [
+        {"name":"Login ADMIN (primeiro uso)","request":{"auth":{"type":"noauth"},"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"},"url":"{{baseUrl}}/auth/login"},"event":[{"listen":"test","script":{"exec":["if (pm.response.code === 200) { const data = pm.response.json(); pm.collectionVariables.set('token', data.token); pm.collectionVariables.set('adminToken', data.token); }"]}}]},
+        {"name":"Registrar PASSAGEIRO","request":{"auth":{"type":"noauth"},"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"name\": \"Ana Souza\",\n  \"email\": \"{{passageiroEmail}}\",\n  \"password\": \"Senha123\",\n  \"cpf\": \"{{passageiroCpf}}\",\n  \"telefone\": \"(11) 99999-1111\",\n  \"instituicaoEnsino\": \"Universidade de Sao Paulo\",\n  \"turno\": \"Manhã\",\n  \"endereco\": {\n    \"cep\": \"01001-000\",\n    \"logradouro\": \"Praca da Se\",\n    \"numero\": \"100\",\n    \"complemento\": \"Apto 12\",\n    \"bairro\": \"Se\",\n    \"cidade\": \"Sao Paulo\",\n    \"uf\": \"SP\"\n  }\n}"},"url":"{{baseUrl}}/auth/register"},"event":[{"listen":"test","script":{"exec":["if (pm.response.code === 201) { const data = pm.response.json(); pm.collectionVariables.set('passageiroToken', data.token); }"]}}]},
+        {"name":"Login PASSAGEIRO","request":{"auth":{"type":"noauth"},"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"email\": \"{{passageiroEmail}}\",\n  \"password\": \"Senha123\"\n}"},"url":"{{baseUrl}}/auth/login"},"event":[{"listen":"test","script":{"exec":["if (pm.response.code === 200) { const data = pm.response.json(); pm.collectionVariables.set('passageiroToken', data.token); pm.collectionVariables.set('token', data.token); }"]}}]},
+        {"name":"Cadastrar MOTORISTA (ADMIN)","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"name\": \"Carlos Silva\",\n  \"email\": \"{{motoristaEmail}}\",\n  \"cnh\": \"98765432101\",\n  \"categoriaCnh\": \"D\",\n  \"dataValidadeCnh\": \"2099/12\",\n  \"cpf\": \"{{motoristaCpf}}\",\n  \"telefone\": \"(11) 98888-1111\",\n  \"password\": \"Senha123\"\n}"},"url":"{{baseUrl}}/motoristas"}},
+        {"name":"Login MOTORISTA","request":{"auth":{"type":"noauth"},"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"email\": \"{{motoristaEmail}}\",\n  \"password\": \"Senha123\"\n}"},"url":"{{baseUrl}}/auth/login"},"event":[{"listen":"test","script":{"exec":["if (pm.response.code === 200) { const data = pm.response.json(); pm.collectionVariables.set('motoristaToken', data.token); pm.collectionVariables.set('token', data.token); }"]}}]},
+        {"name":"Solicitar recuperacao de senha","request":{"auth":{"type":"noauth"},"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"email\": \"{{passageiroEmail}}\"\n}"},"url":"{{baseUrl}}/auth/forgot-password"}},
+        {"name":"Resetar senha (informe o PIN recebido)","request":{"auth":{"type":"noauth"},"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"email\": \"{{passageiroEmail}}\",\n  \"pin\": \"000000\",\n  \"newPassword\": \"NovaSenha123\"\n}"},"url":"{{baseUrl}}/auth/reset-password"}}
+      ]
+    },
+    {
+      "name": "02 - Enderecos",
+      "item": [
+        {"name":"Consultar CEP (publico)","request":{"auth":{"type":"noauth"},"method":"GET","url":"{{baseUrl}}/enderecos/cep/01001-000"}}
+      ]
+    },
+    {
+      "name": "03 - Rotas",
+      "description": "Cadastre a rota e copie o codigoRota retornado na requisicao Listar rotas para {{codigoRota}}.",
+      "item": [
+        {"name":"Cadastrar rota (ADMIN/MOTORISTA)","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"descricao\": \"Centro para Universidade\",\n  \"destino\": \"Universidade de Sao Paulo\",\n  \"distancia\": 12.5,\n  \"tempoEstimado\": \"00:45\"\n}"},"url":"{{baseUrl}}/rotas"}},
+        {"name":"Listar rotas","request":{"method":"GET","url":"{{baseUrl}}/rotas?page=0&size=10&sort=codigoRota,asc"},"event":[{"listen":"test","script":{"exec":["if (pm.response.code === 200) { const data = pm.response.json(); if (data.content && data.content[0]) pm.collectionVariables.set('codigoRota', data.content[0].codigoRota); }"]}}]},
+        {"name":"Buscar rotas por destino","request":{"method":"GET","url":"{{baseUrl}}/rotas/Universidade%20de%20Sao%20Paulo?page=0&size=10&sort=codigoRota,asc"}},
+        {"name":"Atualizar descricao da rota","request":{"method":"PATCH","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"novaDescricao\": \"Centro para Universidade - atualizada\"\n}"},"url":"{{baseUrl}}/rotas/{{codigoRota}}/descricao"}},
+        {"name":"Excluir rota","request":{"method":"DELETE","url":"{{baseUrl}}/rotas?codigoRota={{codigoRota}}"}}
+      ]
+    },
+    {
+      "name": "04 - Veiculos",
+      "item": [
+        {"name":"Cadastrar veiculo","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"placa\": \"VAN-1A23\",\n  \"marca\": \"Mercedes Benz\",\n  \"modelo\": \"Sprinter\",\n  \"ano\": 2024,\n  \"capacidade\": 15,\n  \"renavam\": \"12345678901\",\n  \"status\": \"DISPONIVEL\",\n  \"endereco\": {\n    \"cep\": \"01001-000\",\n    \"logradouro\": \"Praca da Se\",\n    \"numero\": \"100\",\n    \"complemento\": \"Garagem A\",\n    \"bairro\": \"Se\",\n    \"cidade\": \"Sao Paulo\",\n    \"uf\": \"SP\"\n  }\n}"},"url":"{{baseUrl}}/veiculos"}},
+        {"name":"Listar veiculos","request":{"method":"GET","url":"{{baseUrl}}/veiculos?page=0&size=10&sort=placa,asc"}},
+        {"name":"Buscar veiculo por placa","request":{"method":"GET","url":"{{baseUrl}}/veiculos/{{placaVeiculo}}"}},
+        {"name":"Atualizar endereco do veiculo","request":{"method":"PUT","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"cep\": \"01310-100\",\n  \"logradouro\": \"Avenida Paulista\",\n  \"numero\": \"1000\",\n  \"complemento\": \"Portao 2\",\n  \"bairro\": \"Bela Vista\",\n  \"cidade\": \"Sao Paulo\",\n  \"uf\": \"SP\"\n}"},"url":"{{baseUrl}}/veiculos/{{placaVeiculo}}/endereco"}},
+        {"name":"Atualizar status do veiculo","request":{"method":"PUT","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"placa\": \"{{placaVeiculo}}\",\n  \"status\": \"MANUTENCAO\"\n}"},"url":"{{baseUrl}}/veiculos/status"}},
+        {"name":"Excluir veiculo","request":{"method":"DELETE","url":"{{baseUrl}}/veiculos?placa={{placaVeiculo}}"}}
+      ]
+    },
+    {
+      "name": "05 - Motoristas",
+      "item": [
+        {"name":"Listar motoristas","request":{"method":"GET","url":"{{baseUrl}}/motoristas?page=0&size=10&sort=user.name,asc"}},
+        {"name":"Buscar motorista por CPF","request":{"method":"GET","url":"{{baseUrl}}/motoristas/{{motoristaCpf}}"}},
+        {"name":"Atualizar telefone do motorista","request":{"method":"PUT","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"cpf\": \"{{motoristaCpf}}\",\n  \"novoTelefone\": \"(11) 97777-2222\"\n}"},"url":"{{baseUrl}}/motoristas"}},
+        {"name":"Excluir motorista","request":{"method":"DELETE","url":"{{baseUrl}}/motoristas?cpf={{motoristaCpf}}"}}
+      ]
+    },
+    {
+      "name": "06 - Passageiros",
+      "item": [
+        {"name":"Buscar passageiro por CPF","request":{"method":"GET","url":"{{baseUrl}}/passageiros/{{passageiroCpf}}"}},
+        {"name":"Listar passageiros","request":{"method":"GET","url":"{{baseUrl}}/passageiros?page=0&size=10&sort=user.name,asc"}},
+        {"name":"Atualizar passageiro","request":{"method":"PUT","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"nome\": \"Ana Souza Atualizada\",\n  \"telefone\": \"(11) 99999-2222\",\n  \"email\": \"{{passageiroEmail}}\",\n  \"intituicaoEnsino\": \"Universidade de Sao Paulo\",\n  \"turno\": \"Tarde\",\n  \"endereco\": {\n    \"cep\": \"01001-000\",\n    \"logradouro\": \"Praca da Se\",\n    \"numero\": \"101\",\n    \"complemento\": \"Apto 12\",\n    \"bairro\": \"Se\",\n    \"cidade\": \"Sao Paulo\",\n    \"uf\": \"SP\"\n  }\n}"},"url":"{{baseUrl}}/passageiros/{{passageiroCpf}}"}},
+        {"name":"Listar viagens do passageiro","request":{"method":"GET","url":"{{baseUrl}}/passageiros/{{passageiroCpf}}/viagens?page=0&size=10&sort=dataViagem,desc"}},
+        {"name":"Excluir passageiro","request":{"method":"DELETE","url":"{{baseUrl}}/passageiros/{{passageiroCpf}}"}}
+      ]
+    },
+    {
+      "name": "07 - Viagens",
+      "description": "Antes de criar viagem, mantenha cadastrados a rota em {{codigoRota}}, o veiculo em {{placaVeiculo}} e o motorista em {{motoristaCpf}}. A data deve ser futura.",
+      "item": [
+        {"name":"Cadastrar viagem","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"codigoRota\": \"{{codigoRota}}\",\n  \"placaVeiculo\": \"{{placaVeiculo}}\",\n  \"cpfMotorista\": \"{{motoristaCpf}}\",\n  \"dataViagem\": \"2027-01-20\",\n  \"horarioSaidaPrevisto\": \"07:00\",\n  \"horarioChegadaPrevisto\": \"07:45\"\n}"},"url":"{{baseUrl}}/viagens"}},
+        {"name":"Listar viagens","request":{"method":"GET","url":"{{baseUrl}}/viagens?page=0&size=10&sort=dataViagem,desc"},"event":[{"listen":"test","script":{"exec":["if (pm.response.code === 200) { const data = pm.response.json(); if (data.content && data.content[0]) pm.collectionVariables.set('codigoViagem', data.content[0].codigoViagem || data.content[0].codigo); }"]}}]},
+        {"name":"Buscar viagem por codigo","request":{"method":"GET","url":"{{baseUrl}}/viagens/{{codigoViagem}}"}},
+        {"name":"Associar passageiro","request":{"method":"POST","url":"{{baseUrl}}/viagens/{{codigoViagem}}/passageiros/{{passageiroCpf}}"}},
+        {"name":"Listar passageiros da viagem","request":{"method":"GET","url":"{{baseUrl}}/viagens/{{codigoViagem}}/passageiros"}},
+        {"name":"Remover passageiro da viagem","request":{"method":"DELETE","url":"{{baseUrl}}/viagens/{{codigoViagem}}/passageiros/{{passageiroCpf}}"}},
+        {"name":"Atualizar status da viagem","request":{"method":"PUT","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"viagemConcluida\": true\n}"},"url":"{{baseUrl}}/viagens/{{codigoViagem}}"}},
+        {"name":"Excluir viagem","request":{"method":"DELETE","url":"{{baseUrl}}/viagens/{{codigoViagem}}"}}
+      ]
+    },
+    {
+      "name": "08 - Recomendacoes (PASSAGEIRO)",
+      "item": [
+        {"name":"Buscar recomendacoes de viagens","request":{"method":"GET","url":"{{baseUrl}}/viagens/recomendacoes?codigoRota={{codigoRota}}&dataViagem=2027-01-20&chegadaDe=2027-01-20T07:00:00&chegadaAte=2027-01-21T09:00:00&page=0&size=10"}}
+      ]
+    },
+    {
+      "name": "09 - Pagamentos",
+      "item": [
+        {"name":"Cadastrar pagamento","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"cpf\": \"{{passageiroCpf}}\",\n  \"competencia\": \"01/2027\",\n  \"valor\": 150.50,\n  \"dataVencimento\": \"2027-01-10\"\n}"},"url":"{{baseUrl}}/pagamentos"}},
+        {"name":"Listar pagamentos por competencia","request":{"method":"GET","url":"{{baseUrl}}/pagamentos?competencia=01%2F2027&page=0&size=10&sort=dataVencimento,desc"},"event":[{"listen":"test","script":{"exec":["if (pm.response.code === 200) { const data = pm.response.json(); if (data.content && data.content[0]) pm.collectionVariables.set('codigoPagamento', data.content[0].codigoPagamento || data.content[0].codigo); }"]}}]},
+        {"name":"Buscar pagamento por codigo","request":{"method":"GET","url":"{{baseUrl}}/pagamentos/{{codigoPagamento}}"}},
+        {"name":"Listar pagamentos do passageiro","request":{"method":"GET","url":"{{baseUrl}}/pagamentos/passageiro/{{passageiroCpf}}?page=0&size=10&sort=dataVencimento,desc"}},
+        {"name":"Listar meus pagamentos (PASSAGEIRO)","request":{"method":"GET","url":"{{baseUrl}}/pagamentos/meus-pagamentos?page=0&size=10&sort=dataVencimento,desc"}},
+        {"name":"Atualizar status do pagamento","request":{"method":"PATCH","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"status\": \"PAGO\",\n  \"dataPagamento\": \"2027-01-05\"\n}"},"url":"{{baseUrl}}/pagamentos/{{codigoPagamento}}/status"}},
+        {"name":"Excluir pagamento","request":{"method":"DELETE","url":"{{baseUrl}}/pagamentos/{{codigoPagamento}}"}}
+      ]
+    },
+    {
+      "name": "10 - Geolocalizacao externa (ADMIN)",
+      "item": [
+        {"name":"Consultar endereco via Nominatim","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"cep\": \"01001-000\",\n  \"logradouro\": \"Praca da Se\",\n  \"numero\": \"100\",\n  \"bairro\": \"Se\",\n  \"cidade\": \"Sao Paulo\",\n  \"uf\": \"SP\"\n}"},"url":"{{baseUrl}}/geolocalizacao/enderecos/consultar"}},
+        {"name":"Consultar distancia via OSRM","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"origem\": {\"latitude\": -23.5505, \"longitude\": -46.6333},\n  \"destino\": {\"latitude\": -23.5610, \"longitude\": -46.6560},\n  \"permitirEstimativa\": true\n}"},"url":"{{baseUrl}}/geolocalizacao/distancias/consultar"}}
+      ]
+    },
+    {
+      "name": "11 - Geografia persistida (ADMIN)",
+      "item": [
+        {"name":"Consultar localizacao persistida","request":{"method":"GET","url":"{{baseUrl}}/geolocalizacao/cadastros/PASSAGEIRO/{{passageiroCpf}}"}},
+        {"name":"Processar localizacao persistida","request":{"method":"POST","url":"{{baseUrl}}/geolocalizacao/cadastros/PASSAGEIRO/{{passageiroCpf}}/processar?forcar=true"}},
+        {"name":"Revisar origem da viagem","request":{"method":"PUT","header":[{"key":"Content-Type","value":"application/json"}],"body":{"mode":"raw","raw":"{\n  \"endereco\": {\n    \"cep\": \"01001-000\",\n    \"logradouro\": \"Praca da Se\",\n    \"numero\": \"100\",\n    \"bairro\": \"Se\",\n    \"cidade\": \"Sao Paulo\",\n    \"uf\": \"SP\"\n  },\n  \"justificativa\": \"Endereco confirmado manualmente para validacao\"\n}"},"url":"{{baseUrl}}/geolocalizacao/cadastros/viagens/{{codigoViagem}}/origem"}},
+        {"name":"Consultar distancia persistida","request":{"method":"GET","url":"{{baseUrl}}/geolocalizacao/cadastros/viagens/{{codigoViagem}}/passageiros/{{passageiroCpf}}/distancia?permitirEstimativa=true"}},
+        {"name":"Calcular distancia persistida","request":{"method":"POST","url":"{{baseUrl}}/geolocalizacao/cadastros/viagens/{{codigoViagem}}/passageiros/{{passageiroCpf}}/distancia?permitirEstimativa=true&forcar=true"}}
+      ]
+    }
+  ],
+  "variable": [
+    {"key":"baseUrl","value":"http://localhost:8080"},
+    {"key":"token","value":""},
+    {"key":"adminToken","value":""},
+    {"key":"passageiroToken","value":""},
+    {"key":"motoristaToken","value":""},
+    {"key":"adminEmail","value":"admin@vancontrol.com"},
+    {"key":"adminPassword","value":"admin123"},
+    {"key":"passageiroEmail","value":"ana.postman@vancontrol.com"},
+    {"key":"passageiroCpf","value":"52998224725"},
+    {"key":"motoristaEmail","value":"carlos.postman@vancontrol.com"},
+    {"key":"motoristaCpf","value":"11144477735"},
+    {"key":"placaVeiculo","value":"VAN-1A23"},
+    {"key":"codigoRota","value":"ROT-COLE-01"},
+    {"key":"codigoViagem","value":"VIA-COLE-01"},
+    {"key":"codigoPagamento","value":"PAG-COLE-01"}
+  ]
+}

@@ -1,5 +1,6 @@
 package com.VanControl.VanControl.veiculo.controller;
 
+import com.VanControl.VanControl.endereco.domain.dto.EnderecoRequestDto;
 import com.VanControl.VanControl.veiculo.domain.dto.request.AtualizarStatusVeiculoRequestDto;
 import com.VanControl.VanControl.veiculo.domain.dto.request.CadastrarVeiculoRequestDto;
 import com.VanControl.VanControl.veiculo.domain.dto.response.VeiculoDefaultResponseDto;
@@ -17,12 +18,20 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/veiculos")
 @RequiredArgsConstructor
-@Tag(name = "Veiculos", description = "Operacoes relacionadas a veiculos")
+@Tag(name = "Veiculos", description = "Veículos e endereço da base")
 @SecurityRequirement(name = "bearerAuth")
 public class VeiculoController {
 
@@ -31,48 +40,75 @@ public class VeiculoController {
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN','MOTORISTA')")
     @Operation(
-            summary = "Cadastrar veiculo",
-            description = "Entrada: CadastrarVeiculoRequestDto (placa, marca, modelo, ano, capacidade, renavam, status). Saida: VeiculoDefaultResponseDto com mensagem."
+            summary = "Cadastrar veículo com endereço obrigatório da base"
     )
-    public ResponseEntity<VeiculoDefaultResponseDto> cadastrarVeiculo(@RequestBody @Valid CadastrarVeiculoRequestDto dto) {
-        return new ResponseEntity<>(veiculoService.cadastrarVeiculo(dto), HttpStatus.CREATED);
+    public ResponseEntity<VeiculoDefaultResponseDto> cadastrarVeiculo(
+            @RequestBody @Valid CadastrarVeiculoRequestDto dto
+    ) {
+        return new ResponseEntity<>(
+                veiculoService.cadastrarVeiculo(dto),
+                HttpStatus.CREATED
+        );
     }
 
     @GetMapping("/{placa}")
-    @Operation(
-            summary = "Buscar veiculo por placa",
-            description = "Entrada: placa (path). Saida: VeiculoResponseDto (placa, marca, modelo, ano, capacidade, status)."
-    )
-    public ResponseEntity<VeiculoResponseDto> buscarVeiculoPorPlaca(@PathVariable String placa) {
-        return new ResponseEntity<>(veiculoService.buscarVeiculoPorPlaca(placa), HttpStatus.OK);
+    @Operation(summary = "Consultar veículo e endereço da base")
+    public ResponseEntity<VeiculoResponseDto> buscarVeiculoPorPlaca(
+            @PathVariable String placa
+    ) {
+        return ResponseEntity.ok(
+                veiculoService.buscarVeiculoPorPlaca(placa)
+        );
     }
 
     @GetMapping
+    @Operation(summary = "Listar veículos e endereços")
+    public ResponseEntity<Page<VeiculoResponseDto>> listarVeiculos(
+            @PageableDefault(
+                    size = 10,
+                    page = 0,
+                    sort = "placa",
+                    direction = Sort.Direction.ASC
+            )
+            Pageable pageable
+    ) {
+        return ResponseEntity.ok(
+                veiculoService.listarVeiculos(pageable)
+        );
+    }
+
+    @PutMapping("/{placa}/endereco")
+    @PreAuthorize("hasAnyRole('ADMIN','MOTORISTA')")
     @Operation(
-            summary = "Listar veiculos",
-            description = "Saida: lista de VeiculoResponseDto (placa, marca, modelo, ano, capacidade, status)."
+            summary = "Substituir endereço completo da base",
+            description = "Número obrigatório; omitir complemento o remove"
     )
-    public ResponseEntity<Page<VeiculoResponseDto>> listarVeiculos(@PageableDefault(size = 10, page = 0, sort = "placa", direction = Sort.Direction.ASC) Pageable pageable) {
-        return new ResponseEntity<>(veiculoService.listarVeiculos(pageable), HttpStatus.OK);
+    public ResponseEntity<VeiculoResponseDto> atualizarEndereco(
+            @PathVariable String placa,
+            @RequestBody @Valid EnderecoRequestDto dto
+    ) {
+        return ResponseEntity.ok(
+                veiculoService.atualizarEndereco(placa, dto)
+        );
     }
 
     @PutMapping("/status")
     @PreAuthorize("hasAnyRole('ADMIN','MOTORISTA')")
-    @Operation(
-            summary = "Atualizar status do veiculo",
-            description = "Entrada: AtualizarStatusVeiculoRequestDto (placa, status). Saida: VeiculoDefaultResponseDto com mensagem."
-    )
-    public ResponseEntity<VeiculoDefaultResponseDto> atualizarStatusVeiculo(@RequestBody @Valid AtualizarStatusVeiculoRequestDto dto) {
-        return new ResponseEntity<>(veiculoService.atualizarStatusVeiculo(dto), HttpStatus.OK);
+    public ResponseEntity<VeiculoDefaultResponseDto> atualizarStatusVeiculo(
+            @RequestBody @Valid AtualizarStatusVeiculoRequestDto dto
+    ) {
+        return ResponseEntity.ok(
+                veiculoService.atualizarStatusVeiculo(dto)
+        );
     }
 
-    @DeleteMapping()
+    @DeleteMapping
     @PreAuthorize("hasAnyRole('ADMIN','MOTORISTA')")
-    @Operation(
-            summary = "Deletar veiculo",
-            description = "Entrada: placa (query). Saida: VeiculoDefaultResponseDto com mensagem."
-    )
-    public ResponseEntity<VeiculoDefaultResponseDto> deletarVeiculo(@RequestParam String placa) {
-        return new ResponseEntity<>(veiculoService.deletarVeiculo(placa), HttpStatus.OK);
+    public ResponseEntity<VeiculoDefaultResponseDto> deletarVeiculo(
+            @RequestParam String placa
+    ) {
+        return ResponseEntity.ok(
+                veiculoService.deletarVeiculo(placa)
+        );
     }
 }

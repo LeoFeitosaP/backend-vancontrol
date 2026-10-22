@@ -30,12 +30,11 @@ public class MotoristaMapper {
 
     public static RegisterRequestDTO converterParaRequestDto(CadastrarMotoristaRequestDto dto) {
         return new RegisterRequestDTO(
-                dto.nome(),
+                dto.name(),
                 dto.email(),
                 dto.password(),
                 dto.cpf(),
                 dto.telefone(),
-                null,
                 null,
                 null,
                 null

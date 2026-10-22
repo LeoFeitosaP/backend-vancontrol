@@ -1,23 +1,27 @@
-package com.VanControl.VanControl.common.Service;
+package com.VanControl.VanControl.common.service;
 
 import com.VanControl.VanControl.common.exception.model.BadRequestException;
 import com.VanControl.VanControl.common.exception.model.ConflictException;
 import com.VanControl.VanControl.common.exception.model.NotFoundException;
+import com.VanControl.VanControl.common.security.TokenService;
+import com.VanControl.VanControl.endereco.service.EnderecoService;
 import com.VanControl.VanControl.passageiro.service.PassageiroService;
+import com.VanControl.VanControl.user.Repository.UserRepository;
 import com.VanControl.VanControl.user.domain.dto.request.LoginRequestDTO;
 import com.VanControl.VanControl.user.domain.dto.request.RegisterRequestDTO;
 import com.VanControl.VanControl.user.domain.dto.response.ResponseDTO;
-import com.VanControl.VanControl.user.domain.enums.Role;
 import com.VanControl.VanControl.user.domain.entity.User;
-import com.VanControl.VanControl.user.Repository.UserRepository;
-import com.VanControl.VanControl.common.security.TokenService;
+import com.VanControl.VanControl.user.domain.enums.Role;
 import com.VanControl.VanControl.user.service.EmailService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -28,40 +32,65 @@ public class CredentialsService {
     private final PassageiroService passageiroService;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
+    private final EnderecoService enderecoService;
+    private final PlatformTransactionManager transactionManager;
 
     public ResponseDTO registrarUsuario(RegisterRequestDTO dto) {
-        Optional<User> user = this.userRepository.findByEmail(dto.email());
+        var endereco = enderecoService.resolver(dto.endereco());
 
-        if(user.isEmpty()) {
-            User newUser = new User();
-            newUser.setPassword(passwordEncoder.encode(dto.password()));
-            newUser.setEmail(dto.email());
-            newUser.setName(dto.name());
-            newUser.setCpf(dto.cpf());
-            if (dto.instituicaoEnsino() == null) {
-                newUser.setRole(Role.MOTORISTA);
-            } else {
-                newUser.setRole(Role.PASSAGEIRO);
-            }
-            this.userRepository.save(newUser);
+        return new TransactionTemplate(transactionManager).execute(status -> {
+            User user = criarUsuario(dto, Role.PASSAGEIRO);
+            passageiroService.cadastrarPassageiro(dto, user, endereco);
+            userRepository.flush();
 
-            if (newUser.getRole() == Role.PASSAGEIRO) {
-                this.passageiroService.cadastrarPassageiro(dto, newUser);
-            }
+            return new ResponseDTO(
+                    user.getName(),
+                    tokenService.generateToken(user)
+            );
+        });
+    }
 
-            String token = this.tokenService.generateToken(newUser);
-            return new ResponseDTO(newUser.getName(), token);
+    @Transactional(propagation = Propagation.MANDATORY)
+    public User criarUsuarioMotorista(RegisterRequestDTO dto) {
+        return criarUsuario(dto, Role.MOTORISTA);
+    }
+
+    private User criarUsuario(RegisterRequestDTO dto, Role role) {
+        if (dto.email() == null || dto.email().isBlank()) {
+            throw new BadRequestException("Informe o e-mail");
         }
 
-        throw new ConflictException("Passageiro já cadastrado");
+        if (dto.cpf() == null || dto.cpf().isBlank()) {
+            throw new BadRequestException("Informe o CPF");
+        }
+
+        if (userRepository.findByEmail(dto.email()).isPresent()) {
+            throw new ConflictException("E-mail já cadastrado");
+        }
+
+        if (userRepository.existsByCpfNormalizado(dto.cpf())) {
+            throw new ConflictException("CPF já cadastrado");
+        }
+
+        User user = new User();
+        user.setName(dto.name());
+        user.setEmail(dto.email());
+        user.setCpf(dto.cpf());
+        user.setPassword(passwordEncoder.encode(dto.password()));
+        user.setRole(role);
+
+        return userRepository.saveAndFlush(user);
     }
 
     public ResponseDTO login(LoginRequestDTO dto) {
-        User user = this.userRepository.findByEmail(dto.email()).orElseThrow(() -> new NotFoundException("User not found"));
+        User user = userRepository.findByEmail(dto.email())
+                .orElseThrow(() -> new NotFoundException("User not found"));
 
-        if(passwordEncoder.matches(dto.password(), user.getPassword())){
-            String token = this.tokenService.generateToken(user);
-            return new ResponseDTO(user.getName(), token);
+        if (passwordEncoder.matches(dto.password(), user.getPassword())) {
+            return new ResponseDTO(
+                    user.getName(),
+                    tokenService.generateToken(user)
+            );
         }
 
         throw new BadRequestException("Credenciais inválidas");
@@ -71,20 +100,28 @@ public class CredentialsService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
 
-        String pin = String.format("%06d", new java.util.Random().nextInt(999999));
+        String pin = String.format(
+                "%06d",
+                new java.util.Random().nextInt(999999)
+        );
 
         user.setResetPassword(pin);
         user.setExpirationPin(LocalDateTime.now().plusMinutes(15));
         userRepository.save(user);
 
-        emailService.enviarEmailToken(user.getEmail(), user.getName(), pin);
+        emailService.enviarEmailToken(
+                user.getEmail(),
+                user.getName(),
+                pin
+        );
     }
 
     public void resetPassword(String email, String pin, String newPassword) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
 
-        if (user.getResetPassword() == null || !user.getResetPassword().equals(pin)) {
+        if (user.getResetPassword() == null
+                || !user.getResetPassword().equals(pin)) {
             throw new RuntimeException("Código PIN inválido");
         }
 
@@ -98,5 +135,4 @@ public class CredentialsService {
 
         userRepository.save(user);
     }
-
 }
