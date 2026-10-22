@@ -13,7 +13,6 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
-import java.net.URI;
 import java.text.Normalizer;
 import java.util.HashSet;
 import java.util.List;
@@ -25,23 +24,24 @@ import static com.VanControl.VanControl.grafo.domain.dto.ConsultaGeografica.Esta
 @Component
 public class NominatimClient {
 
-    private static final String ATRIBUICAO = "© OpenStreetMap contributors";
+    private static final String ATRIBUICAO =
+            "© OpenStreetMap contributors";
 
     private final RestClient client;
 
     @Autowired
     public NominatimClient(
             @Value("${integracao.nominatim.url:}") String url,
-            @Value("${integracao.nominatim.user-agent:VanControl}") String userAgent,
-            @Value("${integracao.geografica.timeout-ms:3000}") int timeoutMs
+            @Value("${integracao.nominatim.user-agent:VanControl}")
+            String userAgent,
+            @Value("${integracao.geografica.timeout-ms:3000}")
+            int timeoutMs
     ) {
-        // O fluxo trata endereços residenciais. Use instância própria ou contratada.
-        if (url != null && !url.isBlank()
-                && "nominatim.openstreetmap.org".equalsIgnoreCase(URI.create(url).getHost())) {
-            this.client = null;
-        } else {
-            this.client = ClienteGeograficoHttp.criar(url, userAgent, timeoutMs);
-        }
+        this.client = ClienteGeograficoHttp.criar(
+                url,
+                userAgent,
+                timeoutMs
+        );
     }
 
     public NominatimClient(RestClient client) {
@@ -61,11 +61,10 @@ public class NominatimClient {
             return resultado(
                     NAO_CONFIGURADO,
                     null,
-                    "Configure uma instância Nominatim adequada a endereços residenciais"
+                    "Configure uma instância Nominatim"
             );
         }
 
-        // Complemento identifica unidade interna; não localiza a entrada do imóvel.
         String busca = String.join(
                 ", ",
                 endereco.getLogradouro(),
@@ -81,19 +80,24 @@ public class NominatimClient {
 
         try {
             resposta = client.get()
-                    .uri(builder -> builder.path("/search")
+                    .uri(builder -> builder
+                            .path("/search")
                             .queryParam("q", "{busca}")
                             .queryParam("format", "jsonv2")
                             .queryParam("addressdetails", 1)
                             .queryParam("limit", 5)
                             .queryParam("countrycodes", "br")
-                            .queryParam("accept-language", "pt-BR")
+                            .queryParam(
+                                    "accept-language",
+                                    "pt-BR"
+                            )
                             .build(busca))
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .body(Candidato[].class);
 
-        } catch (ResourceAccessException | RestClientResponseException ex) {
+        } catch (ResourceAccessException
+                 | RestClientResponseException ex) {
             return resultado(
                     INDISPONIVEL,
                     null,
@@ -124,77 +128,122 @@ public class NominatimClient {
             );
         }
 
-        var pontos = new HashSet<Ponto>();
+        var pontosCompativeis = new HashSet<Ponto>();
+        Ponto primeiroPontoValido = null;
 
         for (Candidato candidato : resposta) {
             Ponto ponto = coordenadas(candidato);
 
             if (ponto == null || candidato.address() == null) {
-                return resultado(
-                        RESPOSTA_INVALIDA,
-                        null,
-                        "Candidato com dados inválidos"
-                );
+                continue;
+            }
+
+            if (primeiroPontoValido == null) {
+                primeiroPontoValido = ponto;
             }
 
             if (compativel(endereco, candidato.address())) {
-                pontos.add(ponto);
+                pontosCompativeis.add(ponto);
             }
         }
 
-        if (pontos.size() > 1 || resposta.length >= 5) {
+        if (pontosCompativeis.size() > 1) {
             return resultado(
                     AMBIGUA,
                     null,
-                    "Busca sem resultado único; revise o endereço"
+                    "Mais de um resultado confirmou o endereço"
             );
         }
 
-        if (pontos.isEmpty()) {
+        if (pontosCompativeis.size() == 1) {
+            return resultado(
+                    CONFIRMADA,
+                    pontosCompativeis.iterator().next(),
+                    "Endereço confirmado pelo provedor"
+            );
+        }
+
+        if (primeiroPontoValido != null) {
             return resultado(
                     IMPRECISA,
-                    null,
-                    "Nenhum resultado confirma logradouro, número, cidade, UF e CEP"
+                    primeiroPontoValido,
+                    "Número não confirmado; utilizadas as coordenadas "
+                            + "do primeiro resultado do logradouro"
             );
         }
 
         return resultado(
-                CONFIRMADA,
-                pontos.iterator().next(),
-                "Endereço confirmado pelo provedor"
+                RESPOSTA_INVALIDA,
+                null,
+                "Nenhum candidato retornou coordenadas válidas"
         );
     }
 
     private static boolean completo(Endereco e) {
-        return e != null && presente(e.getLogradouro()) && presente(e.getNumero())
-                && presente(e.getBairro()) && presente(e.getCidade())
-                && e.getCep() != null && e.getCep().matches("[0-9]{8}")
-                && e.getUf() != null && e.getUf().matches("[A-Z]{2}");
+        return e != null
+                && presente(e.getLogradouro())
+                && presente(e.getNumero())
+                && presente(e.getBairro())
+                && presente(e.getCidade())
+                && e.getCep() != null
+                && e.getCep().matches("[0-9]{8}")
+                && e.getUf() != null
+                && e.getUf().matches("[A-Z]{2}");
     }
 
-    private static boolean compativel(Endereco e, Map<String, String> a) {
-        boolean cidade = List.of("city", "town", "village", "municipality").stream()
-                .anyMatch(chave -> igual(e.getCidade(), a.get(chave)));
+    private static boolean compativel(
+            Endereco endereco,
+            Map<String, String> resposta
+    ) {
+        boolean cidadeCompativel = List.of(
+                        "city",
+                        "town",
+                        "village",
+                        "municipality"
+                ).stream()
+                .anyMatch(chave -> igual(
+                        endereco.getCidade(),
+                        resposta.get(chave)
+                ));
 
-        String cep = a.getOrDefault("postcode", "");
+        String cepResposta = resposta.getOrDefault(
+                "postcode",
+                ""
+        );
 
-        return "br".equalsIgnoreCase(a.get("country_code"))
-                && igual(e.getLogradouro(), a.get("road"))
-                && igual(e.getNumero(), a.get("house_number"))
-                && cidade
-                && ("BR-" + e.getUf()).equalsIgnoreCase(a.get("ISO3166-2-lvl4"))
-                && cep != null && e.getCep().equals(cep.replace("-", "").trim());
+        return "br".equalsIgnoreCase(
+                resposta.get("country_code")
+        )
+                && igual(
+                endereco.getLogradouro(),
+                resposta.get("road")
+        )
+                && igual(
+                endereco.getNumero(),
+                resposta.get("house_number")
+        )
+                && cidadeCompativel
+                && ("BR-" + endereco.getUf()).equalsIgnoreCase(
+                resposta.get("ISO3166-2-lvl4")
+        )
+                && endereco.getCep().equals(
+                cepResposta
+                        .replace("-", "")
+                        .trim()
+        );
     }
 
-    private static Ponto coordenadas(Candidato c) {
-        if (c == null || c.lat() == null || c.lon() == null) {
+    private static Ponto coordenadas(Candidato candidato) {
+        if (candidato == null
+                || candidato.lat() == null
+                || candidato.lon() == null) {
             return null;
         }
 
         try {
             var ponto = new Ponto(
-                    Double.valueOf(c.lat()),
-                    Double.valueOf(c.lon())
+                    Double.valueOf(candidato.lat()),
+                    Double.valueOf(candidato.lon())
             );
 
             return ponto.valido() ? ponto : null;
@@ -208,12 +257,19 @@ public class NominatimClient {
         return valor != null && !valor.isBlank();
     }
 
-    private static boolean igual(String a, String b) {
-        return presente(a) && presente(b) && normalizar(a).equals(normalizar(b));
+    private static boolean igual(String primeiro, String segundo) {
+        return presente(primeiro)
+                && presente(segundo)
+                && normalizar(primeiro).equals(
+                normalizar(segundo)
+        );
     }
 
     private static String normalizar(String valor) {
-        return Normalizer.normalize(valor, Normalizer.Form.NFD)
+        return Normalizer.normalize(
+                        valor,
+                        Normalizer.Form.NFD
+                )
                 .replaceAll("\\p{M}", "")
                 .trim()
                 .replaceAll("\\s+", " ")
@@ -221,11 +277,17 @@ public class NominatimClient {
     }
 
     private static Geocodificacao resultado(
-            com.VanControl.VanControl.grafo.domain.dto.ConsultaGeografica.EstadoGeocodificacao estado,
+            com.VanControl.VanControl.grafo.domain.dto
+                    .ConsultaGeografica.EstadoGeocodificacao estado,
             Ponto ponto,
             String mensagem
     ) {
-        return new Geocodificacao(estado, ponto, mensagem, ATRIBUICAO);
+        return new Geocodificacao(
+                estado,
+                ponto,
+                mensagem,
+                ATRIBUICAO
+        );
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

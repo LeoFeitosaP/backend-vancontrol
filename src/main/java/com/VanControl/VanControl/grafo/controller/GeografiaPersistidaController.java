@@ -35,7 +35,7 @@ public class GeografiaPersistidaController {
         var r = service.processar(tipo, chave, forcar);
 
         int status = switch (r.estado()) {
-            case "CONFIRMADA" -> 200;
+            case "CONFIRMADA", "IMPRECISA" -> 200;
             case "INDISPONIVEL", "NAO_CONFIGURADO" -> 503;
             case "RESPOSTA_INVALIDA" -> 502;
             default -> 422;

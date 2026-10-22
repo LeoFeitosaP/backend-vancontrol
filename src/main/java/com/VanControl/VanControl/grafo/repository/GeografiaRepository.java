@@ -3,8 +3,14 @@ package com.VanControl.VanControl.grafo.repository;
 import com.VanControl.VanControl.common.exception.model.ConflictException;
 import com.VanControl.VanControl.common.exception.model.NotFoundException;
 import com.VanControl.VanControl.endereco.domain.entity.Endereco;
-import com.VanControl.VanControl.grafo.domain.dto.ConsultaGeografica.*;
-import com.VanControl.VanControl.grafo.domain.dto.GeografiaPersistida.*;
+import com.VanControl.VanControl.grafo.domain.dto.ConsultaGeografica.Distancia;
+import com.VanControl.VanControl.grafo.domain.dto.ConsultaGeografica.EstadoDistancia;
+import com.VanControl.VanControl.grafo.domain.dto.ConsultaGeografica.Geocodificacao;
+import com.VanControl.VanControl.grafo.domain.dto.ConsultaGeografica.MetodoDistancia;
+import com.VanControl.VanControl.grafo.domain.dto.ConsultaGeografica.Ponto;
+import com.VanControl.VanControl.grafo.domain.dto.GeografiaPersistida.Calculo;
+import com.VanControl.VanControl.grafo.domain.dto.GeografiaPersistida.Localizacao;
+import com.VanControl.VanControl.grafo.domain.dto.GeografiaPersistida.Tipo;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -22,6 +28,9 @@ import java.util.UUID;
 
 @Repository
 public class GeografiaRepository {
+
+    private static final String ESTADO_CONFIRMADA = "CONFIRMADA";
+    private static final String ESTADO_IMPRECISA = "IMPRECISA";
 
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transacao;
@@ -62,7 +71,7 @@ public class GeografiaRepository {
             Localizacao anterior,
             Geocodificacao resultado
     ) {
-        Ponto p = resultado.coordenadas();
+        Ponto ponto = resultado.coordenadas();
 
         var rows = jdbc.query("""
                 update geo_localizacao
@@ -77,8 +86,8 @@ public class GeografiaRepository {
                 """,
                 (rs, n) -> localizacao(rs),
                 resultado.estado().name(),
-                p == null ? null : p.latitude(),
-                p == null ? null : p.longitude(),
+                ponto == null ? null : ponto.latitude(),
+                ponto == null ? null : ponto.longitude(),
                 resultado.mensagem(),
                 resultado.atribuicao(),
                 anterior.id(),
@@ -94,7 +103,7 @@ public class GeografiaRepository {
 
     public Localizacao revisarOrigem(
             String codigo,
-            Endereco e,
+            Endereco endereco,
             String justificativa
     ) {
         return transacao.execute(status -> {
@@ -121,23 +130,26 @@ public class GeografiaRepository {
             }
 
             var atual = buscar(Tipo.VIAGEM, codigo);
-            Object[] v = viagens.getFirst();
+            Object[] viagem = viagens.getFirst();
 
             if (!"REVISAO_NECESSARIA".equals(atual.origemEndereco())) {
-                var data = (java.sql.Date) v[1];
-                var hora = (java.sql.Time) v[2];
+                var data = (java.sql.Date) viagem[1];
+                var hora = (java.sql.Time) viagem[2];
 
-                if ((boolean) v[3]
-                        || data == null
-                        || hora == null
-                        || !LocalDateTime.of(
-                        data.toLocalDate(),
-                        hora.toLocalTime()
-                ).isAfter(
-                        LocalDateTime.now(
-                                ZoneId.of("America/Sao_Paulo")
-                        )
-                )) {
+                boolean viagemIniciadaOuConcluida =
+                        (boolean) viagem[3]
+                                || data == null
+                                || hora == null
+                                || !LocalDateTime.of(
+                                data.toLocalDate(),
+                                hora.toLocalTime()
+                        ).isAfter(
+                                LocalDateTime.now(
+                                        ZoneId.of("America/Sao_Paulo")
+                                )
+                        );
+
+                if (viagemIniciadaOuConcluida) {
                     throw new ConflictException(
                             "Origem de viagem iniciada ou concluída não pode mudar"
                     );
@@ -160,15 +172,15 @@ public class GeografiaRepository {
                             returning *
                             """,
                             (rs, n) -> localizacao(rs),
-                            e.getCep(),
-                            e.getLogradouro(),
-                            e.getNumero(),
-                            e.getComplemento(),
-                            e.getBairro(),
-                            e.getCidade(),
-                            e.getUf(),
+                            endereco.getCep(),
+                            endereco.getLogradouro(),
+                            endereco.getNumero(),
+                            endereco.getComplemento(),
+                            endereco.getBairro(),
+                            endereco.getCidade(),
+                            endereco.getUf(),
                             justificativa.trim(),
-                            v[0]
+                            viagem[0]
                     )
             );
         });
@@ -189,8 +201,8 @@ public class GeografiaRepository {
                     and d.permitir_estimativa=?
                     and d.origem_revisao=o.revisao
                     and d.destino_revisao=p.revisao
-                    and o.estado='CONFIRMADA'
-                    and p.estado='CONFIRMADA'
+                    and o.estado in ('CONFIRMADA', 'IMPRECISA')
+                    and p.estado in ('CONFIRMADA', 'IMPRECISA')
                     and d.expira_em>current_timestamp
                 """,
                 (rs, n) -> calculo(rs),
@@ -219,13 +231,7 @@ public class GeografiaRepository {
                     destino.id()
             );
 
-            if (pontos.size() != 2 || pontos.stream().anyMatch(p ->
-                    !"CONFIRMADA".equals(p.estado())
-                            || p.revisao() != (
-                            p.id().equals(origem.id())
-                                    ? origem.revisao()
-                                    : destino.revisao()
-                    ))) {
+            if (localizacoesMudaram(pontos, origem, destino)) {
                 throw desatualizado();
             }
 
@@ -302,8 +308,8 @@ public class GeografiaRepository {
                     and d.metodo='RODOVIARIA'
                     and d.estado='CALCULADA'
                     and d.expira_em>current_timestamp
-                    and o.estado='CONFIRMADA'
-                    and p.estado='CONFIRMADA'
+                    and o.estado in ('CONFIRMADA', 'IMPRECISA')
+                    and p.estado in ('CONFIRMADA', 'IMPRECISA')
                     and d.origem_revisao=o.revisao
                     and d.destino_revisao=p.revisao
                 order by o.viagem_id,d.calculado_em desc
@@ -317,6 +323,43 @@ public class GeografiaRepository {
         );
 
         return resultado;
+    }
+
+    private static boolean localizacoesMudaram(
+            List<Localizacao> pontos,
+            Localizacao origem,
+            Localizacao destino
+    ) {
+        if (pontos.size() != 2) {
+            return true;
+        }
+
+        return pontos.stream().anyMatch(ponto ->
+                !estadoUtilizavel(ponto.estado())
+                        || revisaoEsperada(ponto, origem, destino)
+                        != ponto.revisao()
+        );
+    }
+
+    private static long revisaoEsperada(
+            Localizacao ponto,
+            Localizacao origem,
+            Localizacao destino
+    ) {
+        if (ponto.id().equals(origem.id())) {
+            return origem.revisao();
+        }
+
+        if (ponto.id().equals(destino.id())) {
+            return destino.revisao();
+        }
+
+        return Long.MIN_VALUE;
+    }
+
+    private static boolean estadoUtilizavel(String estado) {
+        return ESTADO_CONFIRMADA.equals(estado)
+                || ESTADO_IMPRECISA.equals(estado);
     }
 
     private static Localizacao unico(List<Localizacao> rows) {
@@ -335,13 +378,14 @@ public class GeografiaRepository {
 
     private static ConflictException desatualizado() {
         return new ConflictException(
-                "Endereço ou geocodificação mudou durante a consulta; repita a operação"
+                "Endereço ou geocodificação mudou durante a consulta; "
+                        + "repita a operação"
         );
     }
 
     private static Localizacao localizacao(ResultSet rs) throws SQLException {
         var data = rs.getTimestamp("consultado_em");
-        Double lat = rs.getObject("latitude", Double.class);
+        Double latitude = rs.getObject("latitude", Double.class);
 
         return new Localizacao(
                 rs.getObject("id", UUID.class),
@@ -361,9 +405,12 @@ public class GeografiaRepository {
                 rs.getLong("revisao"),
                 rs.getString("estado"),
 
-                lat == null
+                latitude == null
                         ? null
-                        : new Ponto(lat, rs.getDouble("longitude")),
+                        : new Ponto(
+                        latitude,
+                        rs.getDouble("longitude")
+                ),
 
                 rs.getString("mensagem"),
                 rs.getString("atribuicao"),

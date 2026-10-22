@@ -11,7 +11,7 @@ public record CadastrarVeiculoRequestDto(
 
         @NotBlank
         @Pattern(
-                regexp = "^[A-Z]{3}-[0-9][A-Z0-9][0-9]{2}$",
+                regexp = "^[A-Z]{3}-?[0-9][A-Z0-9][0-9]{2}$",
                 message = "Placa inválida"
         )
         String placa,

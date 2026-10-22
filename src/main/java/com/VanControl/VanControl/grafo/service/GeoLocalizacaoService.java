@@ -2,7 +2,10 @@ package com.VanControl.VanControl.grafo.service;
 
 import com.VanControl.VanControl.common.exception.model.ConflictException;
 import com.VanControl.VanControl.endereco.service.EnderecoService;
-import com.VanControl.VanControl.grafo.domain.dto.GeografiaPersistida.*;
+import com.VanControl.VanControl.grafo.domain.dto.GeografiaPersistida.Calculo;
+import com.VanControl.VanControl.grafo.domain.dto.GeografiaPersistida.Localizacao;
+import com.VanControl.VanControl.grafo.domain.dto.GeografiaPersistida.RevisarOrigem;
+import com.VanControl.VanControl.grafo.domain.dto.GeografiaPersistida.Tipo;
 import com.VanControl.VanControl.grafo.repository.GeografiaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -10,6 +13,9 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class GeoLocalizacaoService {
+
+    private static final String ESTADO_CONFIRMADA = "CONFIRMADA";
+    private static final String ESTADO_IMPRECISA = "IMPRECISA";
 
     private final GeografiaRepository repository;
     private final NominatimClient nominatim;
@@ -33,7 +39,7 @@ public class GeoLocalizacaoService {
 
         var resultado = nominatim.consultar(atual.endereco());
 
-        // Nenhuma transação/lock de banco fica aberta durante a chamada externa.
+        // Nenhuma transação ou lock permanece aberto durante a chamada externa.
         return repository.salvarResultado(atual, resultado);
     }
 
@@ -62,10 +68,12 @@ public class GeoLocalizacaoService {
         var origem = consultar(Tipo.VIAGEM, codigo);
         var destino = consultar(Tipo.PASSAGEIRO, cpf);
 
-        if (!"CONFIRMADA".equals(origem.estado())
-                || !"CONFIRMADA".equals(destino.estado())) {
+        if (!localizacaoUtilizavel(origem)
+                || !localizacaoUtilizavel(destino)) {
             throw new ConflictException(
-                    "Geocodifique a origem da viagem e o passageiro antes de calcular"
+                    "Origem e destino precisam estar geocodificados "
+                            + "como CONFIRMADA ou IMPRECISA, "
+                            + "com coordenadas válidas"
             );
         }
 
@@ -97,5 +105,17 @@ public class GeoLocalizacaoService {
                 estimativa,
                 resultado
         );
+    }
+
+    private static boolean localizacaoUtilizavel(Localizacao localizacao) {
+        return localizacao != null
+                && estadoUtilizavel(localizacao.estado())
+                && localizacao.coordenadas() != null
+                && localizacao.coordenadas().valido();
+    }
+
+    private static boolean estadoUtilizavel(String estado) {
+        return ESTADO_CONFIRMADA.equals(estado)
+                || ESTADO_IMPRECISA.equals(estado);
     }
 }

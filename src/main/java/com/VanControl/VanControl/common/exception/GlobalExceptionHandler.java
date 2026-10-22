@@ -81,20 +81,37 @@ public class GlobalExceptionHandler {
                 causa != null;
                 causa = causa.getCause()
         ) {
-            if (causa instanceof SQLException sql
-                    && ("23503".equals(sql.getSQLState())
-                    || "23001".equals(sql.getSQLState()))) {
-                return new ResponseEntity<>(
-                        new ErrorDetails(
-                                "Operação viola um vínculo existente entre registros"
-                        ),
-                        HttpStatus.CONFLICT
-                );
+            if (causa instanceof SQLException sql) {
+                if ("23503".equals(sql.getSQLState())
+                        || "23001".equals(sql.getSQLState())) {
+                    return new ResponseEntity<>(
+                            new ErrorDetails(
+                                    "Operação viola um vínculo existente entre registros"
+                            ),
+                            HttpStatus.CONFLICT
+                    );
+                }
+
+                if ("23514".equals(sql.getSQLState())) {
+                    return new ResponseEntity<>(
+                            new ErrorDetails(
+                                    "Os dados informados violam uma regra de integridade"
+                            ),
+                            HttpStatus.valueOf(422)
+                    );
+                }
+
+                if ("23505".equals(sql.getSQLState())) {
+                    return new ResponseEntity<>(
+                            new ErrorDetails("Dados já cadastrados"),
+                            HttpStatus.CONFLICT
+                    );
+                }
             }
         }
 
         return new ResponseEntity<>(
-                new ErrorDetails("Dados já cadastrados"),
+                new ErrorDetails("Falha de integridade dos dados"),
                 HttpStatus.CONFLICT
         );
     }
