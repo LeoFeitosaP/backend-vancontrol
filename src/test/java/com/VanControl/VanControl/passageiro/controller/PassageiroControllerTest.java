@@ -1,49 +1,62 @@
 package com.VanControl.VanControl.passageiro.controller;
 
+import com.VanControl.VanControl.common.exception.GlobalExceptionHandler;
+import com.VanControl.VanControl.common.security.*;
 import com.VanControl.VanControl.common.util.SecurityUtils;
-import com.VanControl.VanControl.passageiro.domain.dto.request.AtualizarPassageiroRequestDto;
 import com.VanControl.VanControl.passageiro.domain.dto.response.PassageiroResponseDto;
-import com.VanControl.VanControl.passageiro.mapper.PassageiroMapper;
 import com.VanControl.VanControl.passageiro.service.PassageiroService;
-import com.VanControl.VanControl.common.security.TokenService;
 import com.VanControl.VanControl.user.Repository.UserRepository;
+import com.VanControl.VanControl.user.domain.entity.User;
+import com.VanControl.VanControl.user.domain.enums.Role;
 import com.VanControl.VanControl.viagem.domain.dto.response.ViagemResumoResponseDto;
 import com.VanControl.VanControl.viagem.service.ViagemService;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
-import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.UUID;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(PassageiroController.class)
-@DisplayName("PassageiroController - Testes de validação de acesso por CPF")
-@Import(PassageiroMapper.class)
+@Import({
+        SecurityConfig.class,
+        SecurityFilter.class,
+        CustomAuthenticationEntryPoint.class,
+        CustomAccessDeniedHandler.class,
+        CustomUserDetailsService.class,
+        SecurityUtils.class,
+        GlobalExceptionHandler.class
+})
 class PassageiroControllerTest {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final String CPF = "02245419006";
+    private static final String OUTRO = "52998224725";
+
+    private static final String CORPO = """
+            {"nome":"Joao Silva","turno":"Tarde",
+             "endereco":{"cep":"01001000","numero":"200"}}
+            """;
 
     @Autowired
-    private MockMvc mockMvc;
+    private MockMvc mvc;
 
     @MockitoBean
     private TokenService tokenService;
@@ -57,175 +70,135 @@ class PassageiroControllerTest {
     @MockitoBean
     private ViagemService viagemService;
 
-    @MockitoBean
-    private SecurityUtils securityUtils;
+    @ParameterizedTest
+    @EnumSource(Role.class)
+    void consultaMantemPoliticaDoController(Role role) throws Exception {
+        when(passageiroService.buscarPassageiroPorCpf(CPF))
+                .thenReturn(resposta());
 
-    private PassageiroResponseDto passageiroResponseDto;
-    private AtualizarPassageiroRequestDto atualizarPassageiroRequestDto;
+        mvc.perform(
+                        get("/passageiros/{cpf}", CPF)
+                                .with(usuario(role))
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cpf").value(CPF));
+    }
 
-    private static final String CPF_PASSAGEIRO = "12345678901";
-    private static final String CPF_OUTRO_PASSAGEIRO = "98765432100";
-    private static final String CPF_ADMIN = "99999999999";
-    private static final String CPF_MOTORISTA = "88888888888";
+    @Test
+    void passageiroNaoConsultaOutroCpf() throws Exception {
+        mvc.perform(
+                        get("/passageiros/{cpf}", OUTRO)
+                                .with(usuario(Role.PASSAGEIRO))
+                )
+                .andExpect(status().isForbidden());
 
-    @BeforeEach
-    void setUp() {
-        passageiroResponseDto = new PassageiroResponseDto(
+        verifyNoInteractions(passageiroService);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = Role.class, names = {"ADMIN", "PASSAGEIRO"})
+    void atualizaEnderecoEstruturado(Role role) throws Exception {
+        when(passageiroService.atualizarPassageiro(eq(CPF), any()))
+                .thenReturn(resposta());
+
+        mvc.perform(
+                        put("/passageiros/{cpf}", CPF)
+                                .with(usuario(role))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(CORPO)
+                )
+                .andExpect(status().isOk());
+
+        verify(passageiroService).atualizarPassageiro(
+                eq(CPF),
+                argThat(dto ->
+                        dto.endereco() != null
+                                && "200".equals(dto.endereco().numero())
+                )
+        );
+    }
+
+    @Test
+    void passageiroNaoAtualizaOutroCpf() throws Exception {
+        mvc.perform(
+                        put("/passageiros/{cpf}", OUTRO)
+                                .with(usuario(Role.PASSAGEIRO))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(CORPO)
+                )
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(passageiroService);
+    }
+
+    @Test
+    void enderecoSemNumeroRetorna400() throws Exception {
+        mvc.perform(
+                        put("/passageiros/{cpf}", CPF)
+                                .with(usuario(Role.PASSAGEIRO))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        CORPO.replace(",\"numero\":\"200\"", "")
+                                )
+                )
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(passageiroService);
+    }
+
+    @Test
+    void listaViagensDoProprioPassageiro() throws Exception {
+        var viagem = new ViagemResumoResponseDto(
+                "VIA-12345678",
+                "ROT-123",
+                "ABC-1234",
+                LocalDate.of(2026, 5, 10),
+                LocalTime.of(8, 0),
+                LocalTime.of(9, 0),
+                false
+        );
+
+        when(viagemService.listarViagensPorPassageiroCpf(eq(CPF), any()))
+                .thenReturn(new PageImpl<>(List.of(viagem)));
+
+        mvc.perform(
+                        get("/passageiros/{cpf}/viagens", CPF)
+                                .with(usuario(Role.PASSAGEIRO))
+                )
+                .andExpect(status().isOk())
+                .andExpect(
+                        jsonPath("$.content[0].codigoViagem")
+                                .value("VIA-12345678")
+                );
+    }
+
+    private PassageiroResponseDto resposta() {
+        return new PassageiroResponseDto(
                 "Joao Silva",
-                CPF_PASSAGEIRO,
-                "\\(11\\) 11111-1111",
-                "joao@email.com",
-                "UFSC",
-                "Manha",
-                "Rua A, 123",
-                "88000-000"
-        );
-
-        atualizarPassageiroRequestDto = new AtualizarPassageiroRequestDto(
-                "Joao Silva Atualizado",
-                "(11) 22222-2222",
-                "joao.novo@email.com",
-                "UFSC",
+                CPF,
+                "(11) 99999-1234",
+                "joao@example.com",
+                "UNISO",
                 "Tarde",
-                "Rua B, 456",
-                "88000-001"
+                "Endereço legado",
+                "01001-000"
         );
     }
 
-    @Test
-    @DisplayName("Deve buscar passageiro por CPF quando PASSAGEIRO acessa seus próprios dados")
-    @WithMockUser(username = CPF_PASSAGEIRO, roles = "PASSAGEIRO")
-    void deveBuscarPassageiroPorCpfQuandoPassageiroAcessaProprioDados() throws Exception {
-        doNothing().when(securityUtils).validateCpfAccess(CPF_PASSAGEIRO);
-        when(passageiroService.buscarPassageiroPorCpf(CPF_PASSAGEIRO)).thenReturn(passageiroResponseDto);
+    private RequestPostProcessor usuario(Role role) {
+        var user = new User();
+        user.setId(UUID.randomUUID());
+        user.setCpf(CPF);
+        user.setRole(role);
 
-        mockMvc.perform(get("/passageiros/{cpf}", CPF_PASSAGEIRO))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.cpf").value(CPF_PASSAGEIRO))
-                .andExpect(jsonPath("$.nome").value("Joao Silva"));
-
-        verify(securityUtils, times(1)).validateCpfAccess(CPF_PASSAGEIRO);
-        verify(passageiroService, times(1)).buscarPassageiroPorCpf(CPF_PASSAGEIRO);
-    }
-
-    @Test
-    @DisplayName("Deve bloquear PASSAGEIRO de buscar dados de outro passageiro")
-    @WithMockUser(username = CPF_PASSAGEIRO, roles = "PASSAGEIRO")
-    void deveBloquerPassageiroDeBuscarDadosDeOutro() throws Exception {
-        doThrow(new AccessDeniedException("Você não tem permissão para acessar dados de outro usuário"))
-                .when(securityUtils).validateCpfAccess(CPF_OUTRO_PASSAGEIRO);
-
-        mockMvc.perform(get("/passageiros/{cpf}", CPF_OUTRO_PASSAGEIRO))
-                .andExpect(status().isForbidden());
-
-        verify(securityUtils, times(1)).validateCpfAccess(CPF_OUTRO_PASSAGEIRO);
-        verify(passageiroService, never()).buscarPassageiroPorCpf(any());
-    }
-
-    @Test
-    @DisplayName("Deve permitir ADMIN buscar passageiro por qualquer CPF")
-    @WithMockUser(username = CPF_ADMIN, roles = "ADMIN")
-    void devePermitirAdminBuscarPassageiroPorQualquerCpf() throws Exception {
-        doNothing().when(securityUtils).validateCpfAccess(CPF_PASSAGEIRO);
-        when(passageiroService.buscarPassageiroPorCpf(CPF_PASSAGEIRO)).thenReturn(passageiroResponseDto);
-
-        mockMvc.perform(get("/passageiros/{cpf}", CPF_PASSAGEIRO))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.cpf").value(CPF_PASSAGEIRO));
-
-        verify(securityUtils, times(1)).validateCpfAccess(CPF_PASSAGEIRO);
-        verify(passageiroService, times(1)).buscarPassageiroPorCpf(CPF_PASSAGEIRO);
-    }
-
-    @Test
-    @DisplayName("Deve permitir MOTORISTA buscar passageiro por qualquer CPF")
-    @WithMockUser(username = CPF_MOTORISTA, roles = "MOTORISTA")
-    void devePermitirMotoristaBuscarPassageiroPorQualquerCpf() throws Exception {
-        doNothing().when(securityUtils).validateCpfAccess(CPF_PASSAGEIRO);
-        when(passageiroService.buscarPassageiroPorCpf(CPF_PASSAGEIRO)).thenReturn(passageiroResponseDto);
-
-        mockMvc.perform(get("/passageiros/{cpf}", CPF_PASSAGEIRO))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.cpf").value(CPF_PASSAGEIRO));
-
-        verify(securityUtils, times(1)).validateCpfAccess(CPF_PASSAGEIRO);
-        verify(passageiroService, times(1)).buscarPassageiroPorCpf(CPF_PASSAGEIRO);
-    }
-
-    @Test
-    @DisplayName("Deve atualizar passageiro quando PASSAGEIRO atualiza seus próprios dados")
-    @WithMockUser(username = CPF_PASSAGEIRO, roles = "PASSAGEIRO")
-    void deveAtualizarPassageiroQuandoPassageiroAtualizaProprioDados() throws Exception {
-        doNothing().when(securityUtils).validateCpfAccess(CPF_PASSAGEIRO);
-        when(passageiroService.atualizarPassageiro(eq(CPF_PASSAGEIRO), any(AtualizarPassageiroRequestDto.class)))
-                .thenReturn(passageiroResponseDto);
-
-        mockMvc.perform(put("/passageiros/{cpf}", CPF_PASSAGEIRO)
-                        .with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(atualizarPassageiroRequestDto)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.cpf").value(CPF_PASSAGEIRO));
-
-        verify(securityUtils, times(1)).validateCpfAccess(CPF_PASSAGEIRO);
-        verify(passageiroService, times(1)).atualizarPassageiro(eq(CPF_PASSAGEIRO), any(AtualizarPassageiroRequestDto.class));
-    }
-
-    @Test
-    @DisplayName("Deve bloquear PASSAGEIRO de atualizar dados de outro passageiro")
-    @WithMockUser(username = CPF_PASSAGEIRO, roles = "PASSAGEIRO")
-    void deveBloquerPassageiroDeAtualizarDadosDeOutro() throws Exception {
-        doThrow(new AccessDeniedException("Você não tem permissão para acessar dados de outro usuário"))
-                .when(securityUtils).validateCpfAccess(CPF_OUTRO_PASSAGEIRO);
-
-        mockMvc.perform(put("/passageiros/{cpf}", CPF_OUTRO_PASSAGEIRO)
-                        .with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(atualizarPassageiroRequestDto)))
-                .andExpect(status().isForbidden());
-
-        verify(securityUtils, times(1)).validateCpfAccess(CPF_OUTRO_PASSAGEIRO);
-        verify(passageiroService, never()).atualizarPassageiro(any(), any());
-    }
-
-    @Test
-    @DisplayName("Deve permitir ADMIN atualizar dados de qualquer passageiro")
-    @WithMockUser(username = CPF_ADMIN, roles = "ADMIN")
-    void devePermitirAdminAtualizarQualquerPassageiro() throws Exception {
-        doNothing().when(securityUtils).validateCpfAccess(CPF_PASSAGEIRO);
-        when(passageiroService.atualizarPassageiro(eq(CPF_PASSAGEIRO), any(AtualizarPassageiroRequestDto.class)))
-                .thenReturn(passageiroResponseDto);
-
-        mockMvc.perform(put("/passageiros/{cpf}", CPF_PASSAGEIRO)
-                        .with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(atualizarPassageiroRequestDto)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.cpf").value(CPF_PASSAGEIRO));
-
-        verify(securityUtils, times(1)).validateCpfAccess(CPF_PASSAGEIRO);
-        verify(passageiroService, times(1)).atualizarPassageiro(eq(CPF_PASSAGEIRO), any(AtualizarPassageiroRequestDto.class));
-    }
-
-    @Test
-    @DisplayName("Deve listar viagens do passageiro quando acessa seus próprios dados")
-    @WithMockUser(username = CPF_PASSAGEIRO, roles = "PASSAGEIRO")
-    void deveListarViagensDoPassageiroQuandoPassageiroAcessaProprioDados() throws Exception {
-        doNothing().when(securityUtils).validateCpfAccess(CPF_PASSAGEIRO);
-
-        ViagemResumoResponseDto viagemResumo = new ViagemResumoResponseDto(
-                "VIA-12345678", "ROT-123", "ABC-1234",
-                LocalDate.of(2026,5,10),
-                LocalTime.of(8,0), LocalTime.of(9,0), false);
-
-        when(viagemService.listarViagensPorPassageiroCpf(eq(CPF_PASSAGEIRO), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(viagemResumo)));
-
-        mockMvc.perform(get("/passageiros/{cpf}/viagens", CPF_PASSAGEIRO))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].codigoViagem").value("VIA-12345678"));
-
-        verify(securityUtils, times(1)).validateCpfAccess(CPF_PASSAGEIRO);
-        verify(viagemService, times(1)).listarViagensPorPassageiroCpf(eq(CPF_PASSAGEIRO), any(Pageable.class));
+        return authentication(
+                new UsernamePasswordAuthenticationToken(
+                        user,
+                        null,
+                        List.of(
+                                new SimpleGrantedAuthority("ROLE_" + role.name())
+                        )
+                )
+        );
     }
 }
